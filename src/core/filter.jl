@@ -1261,8 +1261,8 @@ function qkf_filter!(data::QKData{T1, 1},
         compute_loglik!(llₜ, Yₜ, Yₜₜ₋₁, Mₜₜ₋₁, t)
     end
 
-    return (llₜ = llₜ, Zₜₜ = Zₜₜ, Pₜₜ = Pₜₜ,  Yₜₜ₋₁ = Yₜₜ₋₁, Mₜₜ₋₁ = Mₜₜ₋₁, Kₜ = Kₜ, Zₜₜ₋₁ = Zₜₜ₋₁,
-            Pₜₜ₋₁ = Pₜₜ₋₁, Σₜₜ₋₁ = Σₜₜ₋₁)
+    return FilterOutput(llₜ = llₜ, Zₜₜ = Zₜₜ, Pₜₜ = Pₜₜ,  Yₜₜ₋₁ = Yₜₜ₋₁, Mₜₜ₋₁ = Mₜₜ₋₁,
+        Kₜ = Kₜ, Zₜₜ₋₁ = Zₜₜ₋₁, Pₜₜ₋₁ = Pₜₜ₋₁, Σₜₜ₋₁ = Σₜₜ₋₁)
 
 end
 
@@ -1381,8 +1381,9 @@ function qkf_filter(data::QKData{T1, 1},
         llₜ[t] = compute_loglik(Yₜ[t], Yₜₜ₋₁[t], Mₜₜ₋₁[:, :, t])
     end
 
-    return (llₜ = copy(llₜ), Zₜₜ = copy(Zₜₜ), Pₜₜ = copy(Pₜₜ), Yₜₜ₋₁ = copy(Yₜₜ₋₁),
-        Mₜₜ₋₁ = copy(Mₜₜ₋₁), Kₜ = copy(Kₜ), Zₜₜ₋₁ = copy(Zₜₜ₋₁), Pₜₜ₋₁ = copy(Pₜₜ₋₁))
+    return FilterOutput(llₜ = copy(llₜ), Zₜₜ = copy(Zₜₜ), Pₜₜ = copy(Pₜₜ),
+        Yₜₜ₋₁ = copy(Yₜₜ₋₁), Mₜₜ₋₁ = copy(Mₜₜ₋₁), Kₜ = copy(Kₜ), Zₜₜ₋₁ = copy(Zₜₜ₋₁),
+        Pₜₜ₋₁ = copy(Pₜₜ₋₁))
 end
 
 """
@@ -1538,8 +1539,8 @@ function qkf_filter!(data::QKData{T, 2}, params::QKParams{T,T2}) where {T <: Rea
         llₜ[t] = compute_loglik(Yₜ[t], Yₜₜ₋₁[t], Mₜₜ₋₁[:, :, t])
     end
 
-    return (llₜ = llₜ, Zₜₜ = Zₜₜ, Pₜₜ = Pₜₜ,  Yₜₜ₋₁ = Yₜₜ₋₁, Mₜₜ₋₁ = Mₜₜ₋₁, Kₜ = Kₜ, Zₜₜ₋₁ = Zₜₜ₋₁,
-            Pₜₜ₋₁ = Pₜₜ₋₁, Σₜₜ₋₁ = Σₜₜ₋₁)
+    return FilterOutput(llₜ = llₜ, Zₜₜ = Zₜₜ, Pₜₜ = Pₜₜ,  Yₜₜ₋₁ = Yₜₜ₋₁, Mₜₜ₋₁ = Mₜₜ₋₁,
+        Kₜ = Kₜ, Zₜₜ₋₁ = Zₜₜ₋₁, Pₜₜ₋₁ = Pₜₜ₋₁, Σₜₜ₋₁ = Σₜₜ₋₁)
 
 end
 
@@ -1597,7 +1598,8 @@ function qkf_filter_functional(data::QKData{T, 2}, params::QKParams{T,T2})
         Mₜₜ₋₁_new = cat(Mₜₜ₋₁, Mₜₜ₋₁_t, dims=3)
         llₜ_new = vcat(llₜ, llₜ_t)
 
-        (Zₜₜ_new, Pₜₜ_new, Zₜₜ₋₁_new, Pₜₜ₋₁_new, Σₜₜ₋₁_new, Kₜ_new, Yₜₜ₋₁_new, Mₜₜ₋₁_new, llₜ_new)
+        return (Zₜₜ_new, Pₜₜ_new, Zₜₜ₋₁_new, Pₜₜ₋₁_new, Σₜₜ₋₁_new, Kₜ_new, Yₜₜ₋₁_new,
+            Mₜₜ₋₁_new, llₜ_new)
     end
 
     init_state = (Zₜₜ_init, Pₜₜ_init, zeros(T, P, 0), zeros(T, P, P, 0), zeros(T, P, P, 0), 
@@ -1607,8 +1609,8 @@ function qkf_filter_functional(data::QKData{T, 2}, params::QKParams{T,T2})
 
     (Zₜₜ, Pₜₜ, Zₜₜ₋₁, Pₜₜ₋₁, Σₜₜ₋₁, Kₜ, Yₜₜ₋₁, Mₜₜ₋₁, llₜ) = final_state
 
-    return (llₜ = llₜ, Zₜₜ = Zₜₜ, Pₜₜ = Pₜₜ, Yₜₜ₋₁ = Yₜₜ₋₁, Mₜₜ₋₁ = Mₜₜ₋₁, Kₜ = Kₜ, Zₜₜ₋₁ = Zₜₜ₋₁,
-            Pₜₜ₋₁ = Pₜₜ₋₁, Σₜₜ₋₁ = Σₜₜ₋₁)
+    return FilterOutput(llₜ = llₜ, Zₜₜ = Zₜₜ, Pₜₜ = Pₜₜ, Yₜₜ₋₁ = Yₜₜ₋₁, Mₜₜ₋₁ = Mₜₜ₋₁,
+        Kₜ = Kₜ, Zₜₜ₋₁ = Zₜₜ₋₁, Pₜₜ₋₁ = Pₜₜ₋₁, Σₜₜ₋₁ = Σₜₜ₋₁)
 end
 
 """
@@ -1673,7 +1675,7 @@ A named tuple with:
 
 # Example
 
-```julia
+```
 # Suppose Y is a vector of length T̄+1
 data = QKData(Y, M=1, T̄=length(Y)-1)
 params = QKParams(μ̃ᵘ=..., Σ̃ᵘ=..., ...)
@@ -1683,8 +1685,11 @@ results = qkf_filter(data, params)
 @show results.llₜ
 @show size(results.Zₜₜ)
 @show size(results.Pₜₜ)
+```
 """
-function qkf_filter(data::QKData{T1, N}, params::QKParams{T,T2}) where {T1 <:Real, T <: Real, T2 <:Real, N}
+function qkf_filter(data::QKData{T1, N},
+    params::QKParams{T,T2}) where {T1 <:Real, T <: Real, T2 <:Real, N}
+    
     @unpack T̄, Y, M = data
     @assert length(Y) == T̄ + 1 "Y should have T̄ + 1 observations"
 
@@ -1721,7 +1726,7 @@ function qkf_filter(data::QKData{T1, N}, params::QKParams{T,T2}) where {T1 <:Rea
 
     end
 
-    return (llₜ = llₜ, Zₜₜ = hcat(Zₜₜ...), Pₜₜ = cat(Pₜₜ..., dims=3))
+    return FilterOutput(llₜ = llₜ, Zₜₜ = hcat(Zₜₜ...), Pₜₜ = cat(Pₜₜ..., dims=3))
 end
 
 export qkf_filter, qkf_filter!

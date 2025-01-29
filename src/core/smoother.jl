@@ -69,14 +69,15 @@ qkf_smoother!(Z, P, Z_pred, P_pred, T_bar, Hn, Gn, H_aug, Φ_aug, n)
 """
 function qkf_smoother!(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
     Z_pred::AbstractMatrix{T}, P_pred::AbstractArray{T,3}, T_bar::Int,
-    G_aug::AbstractMatrix{T}, H_aug::AbstractMatrix{T}, Φ_aug::AbstractMatrix{T},
+    G_aug::AbstractMatrix{T}, H_aug::AbstractMatrix{T}, Phi_aug::AbstractMatrix{T},
     dof::Int) where {T <: Real}
 
-    @assert size(Z,2) == T̄ + 1 "Z should have T̄+1 columns"
-    @assert size(P,3) == T̄ + 1 "P should have T̄+1 slices"
-    @assert size(Z_pred,2) == T̄ "Z_pred should have T̄ columns"
-    @assert size(P_pred,3) == T̄ "P_pred should have T̄ slices"
+    @assert size(Z,2) == T_bar + 1 "Z should have T_bar+1 columns"
+    @assert size(P,3) == T_bar + 1 "P should have T_bar+1 slices"
+    @assert size(Z_pred,2) == T_bar "Z_pred should have T_bar columns"
+    @assert size(P_pred,3) == T_bar "P_pred should have T_bar slices"
     
+
     # Work backward from t=T_bar-1 down to t=1
     for t in (T_bar-1):-1:1
         # 1) Transform P^Z_{t|t} and P^Z_{t+1|t} with H̃
@@ -96,8 +97,9 @@ function qkf_smoother!(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
         # 3) Form the cross term: (tilde{H}_n * tilde{\Phi} * tilde{G}_n)'
         #    We'll store it if needed or do direct multiplication inline.
         #    Typically: cross = (H_aug * Φ_aug * G_aug)' 
-        cross = (H_aug * Φ_aug * G_aug)'
+        cross = (H_aug * Phi_aug * G_aug)'
     
+
         # 4) Now compute F_t = M_t * cross * (M_t1)^-1
         #    But we use a solve: F_t = M_t * cross * (M_t1 \ I)
         #    i.e. F_t = M_t * cross * inv(M_t1), so we do:
@@ -119,8 +121,9 @@ function qkf_smoother!(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
     
         # 6) Update the smoothed M_t ( => (H̃ P^Z_{t|T} H̃') ), then revert
         #    M_{t|T} = M_t + F_t [ (H̃ P^Z_{t+1|T} H̃') - M_t1 ] F_t'    #    We have P^Z_{t+1|T} = P[:,:,t+1] at this point (the smoothed version).
-        M_t1_smooth = H̃ * P[:,:,t+1] * H̃'
+        M_t1_smooth = H_aug * P[:,:,t+1] * H_aug'
         dM = M_t1_smooth .- M_t1
+
         #   mid = F_t * dM
         mid = similar(F_t, size(F_t,1), size(dM,2))
         mul!(mid, F_t, dM)
@@ -133,18 +136,20 @@ function qkf_smoother!(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
         #    H̃ * P^Z_{t|T} * H̃' = new_M_t
         #    => P^Z_{t|T} = (H̃') \ new_M_t / (H̃)   (conceptually)
         #    but in practice we handle the shape carefully. 
-        #    If H̃ is invertible, we do a solve again:
-        factor_tilde = lu(H̃)  # or cholesky if appropriate
+        #    If H_aug is invertible, we do a solve again:
+        factor_tilde = lu(H_aug)  # or cholesky if appropriate
         # let Q = factor_tilde \ new_M_t
         Q = similar(new_M_t)
+
         ldiv!(Q, factor_tilde, new_M_t)  # Q = H̃^-1 * new_M_t
         # Now P^Z_{t|T} = Q * (H̃^-1)' 
         # We'll do another ldiv! with factor_tilde on Q^T if needed. 
         # Or a direct approach: P^Z_{t|T} = Q * inv(H̃')
         # We'll do factor_tilde' if it’s an LU or cholesky factor. 
         # For simplicity:
-        P_tT = Q * inv(H̃')   # This is an allocation; we can refine if needed
+        P_tT = Q * inv(H_aug')   # This is an allocation; we can refine if needed
     
+
         # Overwrite the slices:
         # Overwrite Z_{t|T} by transforming hZ_t_smooth back:
         # we want Z_{t|T} = H̃^-1 * hZ_t_smooth
@@ -179,7 +184,8 @@ Z_smooth, P_smooth = qkf_smoother(Z, P, Z_pred, P_pred, T̄, Hn, Gn, H̃, Φ̃, 
 function qkf_smoother(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
     Z_pred::AbstractMatrix{T}, P_pred::AbstractArray{T,3}, T_bar::Int,
     G_aug::AbstractMatrix{T}, H_aug::AbstractMatrix{T},
-    Φ_aug::AbstractMatrix{T}, dof::Int) where {T<:Real}
+    Phi_aug::AbstractMatrix{T}, dof::Int) where {T<:Real}
+
 
     # Make copies (or a deep copy if needed)
     Z_smooth = copy(Z)
@@ -187,7 +193,8 @@ function qkf_smoother(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
     P_smooth .= P  # replicate the filtered covariances
 
     # Just call the in-place version on the copies:
-    qkf_smoother!(Z_smooth, P_smooth, Z_pred, P_pred, T_bar, G_aug, H_aug, Φ_aug, dof)
+    qkf_smoother!(Z_smooth, P_smooth, Z_pred, P_pred, T_bar, G_aug, H_aug, Phi_aug, dof)
+
 
     return (copy(Z_smooth), copy(P_smooth))
 
@@ -200,15 +207,16 @@ In-place backward smoothing for the QKF using filter outputs.
 """
 function qkf_smoother!(filter_output::FilterOutput{T}, model::QKModel{T,T2}) where {T<:Real, T2<:Real}
     @unpack Z_tt, P_tt, Z_ttm1, P_ttm1 = filter_output
-    @unpack H_aug, G_aug, Φ_aug = model.AugStateParams
+    @unpack H_aug, G_aug, Phi_aug = model.aug_state
     T_bar = size(Z_tt, 2) - 1
     
+
     # Make copies to store smoothed results
     Z_smooth = copy(Z_tt)
     P_smooth = copy(P_tt)
     
     # Call original smoother implementation
-    qkf_smoother!(Z_smooth, P_smooth, Z_ttm1, P_ttm1, T_bar, G_aug, H_aug, Φ_aug, N)
+    qkf_smoother!(Z_smooth, P_smooth, Z_ttm1, P_ttm1, T_bar, G_aug, H_aug, Phi_aug, N)
     
     return SmootherOutput(Z_smooth, P_smooth)
 end

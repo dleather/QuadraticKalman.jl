@@ -7,45 +7,43 @@ struct FilterOutput{T<:Real}
     ll_t::Vector{T}
     Z_tt::Matrix{T}
     P_tt::Array{T,3}
-    Y_tt_minus_1::Union{Vector{T}, Matrix{T}}  # Allow for both vector and matrix measurements
-    M_tt_minus_1::Array{T,3}
-    K_tt::Array{T,3}
+    Y_ttm1::Union{Vector{T}, Matrix{T}}  # Allow for both vector and matrix measurements
+    M_ttm1::Array{T,3}
+    K_t::Array{T,3}
     Z_ttm1::Matrix{T}
     P_ttm1::Array{T,3}
-    Sigma_ttm1::Array{T,3}
 end
 
 # Constructor for Vector measurement case (QKData{T1,1})
-function FilterOutput(output_tuple::NamedTuple{(:ll_t, :Z_tt, :P_tt, :Y_tt_minus_1, :M_tt_minus_1, :K_tt,
+function FilterOutput(output_tuple::NamedTuple{(:ll_t, :Z_tt, :P_tt, :Y_tt_minus_1, :M_tt_minus_1, :K_t,
     :Z_ttm1, :P_ttm1, :Sigma_ttm1)})
     
     return FilterOutput(
         output_tuple.ll_t,
         output_tuple.Z_tt,
         output_tuple.P_tt,
-        output_tuple.Y_tt_minus_1,
-        output_tuple.M_tt_minus_1,
-        output_tuple.K_tt,
+        output_tuple.Y_ttm1,
+        output_tuple.M_ttm1,
+        output_tuple.K_t,
         output_tuple.Z_ttm1,
         output_tuple.P_ttm1,
-        output_tuple.Sigma_ttm1
     )
 end
 
 # Constructor for Matrix measurement case (QKData{T,2})
-function FilterOutput(output_tuple::NamedTuple{(:ll_t, :Z_tt, :P_tt, :Y_tt_minus_1, :M_tt_minus_1, :K_tt,
-    :Z_ttm1, :P_ttm1, :Sigma_ttm1)})
-    T = eltype(output_tuple.Zₜₜ)
+function FilterOutput(output_tuple::NamedTuple{(:ll_t, :Z_tt, :P_tt, :Y_ttm1, :M_ttm1, :K_t,
+    :Z_ttm1, :P_ttm1)})
+    T = eltype(output_tuple.Z_tt)
+
     return FilterOutput(
         output_tuple.ll_t,
         output_tuple.Z_tt,
         output_tuple.P_tt,
-        output_tuple.Y_tt_minus_1,
-        output_tuple.M_tt_minus_1,
-        output_tuple.K_tt,
+        output_tuple.Y_ttm1,
+        output_tuple.M_ttm1,
+        output_tuple.K_t,
         output_tuple.Z_ttm1,
         output_tuple.P_ttm1,
-        zeros(T, size(output_tuple.P_ttm1))  # Empty Σₜₜ₋₁ for this case
     )
 end
 
@@ -63,9 +61,9 @@ function FilterOutput(ll_t::Vector{T}, Z_tt::Matrix{T}, P_tt::Array{T,3}) where 
         Array{T,3}(undef, 0, 0, 0), # Empty Kₜ
         Matrix{T}(undef, 0, 0),     # Empty Zₜₜ₋₁
         Array{T,3}(undef, 0, 0, 0), # Empty Pₜₜ₋₁
-        Array{T,3}(undef, 0, 0, 0)  # Empty Σₜₜ₋₁
     )
 end
+
 
 """
     SmootherOutput{T<:Real}

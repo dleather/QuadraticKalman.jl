@@ -160,7 +160,7 @@ function compute_H_aug(N::Int, H::AbstractMatrix{T}) where T <: Real
     bottom_left = zeros(T, n_rows - N, N)
     
     # Combine all parts
-    H̃ = [
+    H_aug = [
         top_left    top_right;
         bottom_left bottom_right
     ]

@@ -84,7 +84,7 @@ function compute_e(M::Int, ::Type{T}=Float64) where T <: Real
 end
 
 """
-    compute_Λ(N::Int, ::Type{T}=Float64) where T <: Real
+    compute_Lambda(N::Int, ::Type{T}=Float64) where T <: Real
 
 Compute the commutation matrix Λₙ of size n² × n².
 
@@ -103,16 +103,16 @@ to handle vectorized covariance matrices.
 The matrix can be constructed either using explicit block assignments or using Kronecker products.
 This implementation uses the more efficient Kronecker product approach.
 """
-function compute_Λ(N::Int, ::Type{T}=Float64) where T <: Real
+function compute_Lambda(N::Int, ::Type{T}=Float64) where T <: Real
     # Get the unit vectors e₁,...,eₙ
     e = compute_e(N, T)
     
     # Construct N×N blocks where block (i,j) is eᵢeⱼ'
     # Each block is N×N, resulting in an N²×N² matrix when combined
-    Λ = [ Matrix(kron(e[i], e[j])') for i in 1:N, j in 1:N ]
+    Lambda = [ Matrix(kron(e[i], e[j])') for i in 1:N, j in 1:N ]
     
     # Vertically concatenate all blocks into final N²×N² commutation matrix
-    return reduce(vcat, Λ)
+    return reduce(vcat, Lambda)
 end
 
 """

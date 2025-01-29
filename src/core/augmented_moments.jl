@@ -10,8 +10,8 @@ This file implements several scalar and multivariate routines inspired by **Prop
 and **Proposition 3.2** in the QKF context:
 
 1. **Augmented Mean and Transition**  
-   - `compute_mean_aug(mu, Sigma)`: Constructs the augmented mean vector, concatenating `[mu; vec(mu*mu' + Sigma)]`.  
-   - `compute_aug_state_transition(mu, Phi)`: Builds the augmented state transition matrix for both scalar and 
+   - `compute_mu_aug(mu, Sigma)`: Constructs the augmented drift vector, concatenating `[mu; vec(mu*mu' + Sigma)]`.  
+   - `compute_Phi_aug(mu, Phi)`: Builds the augmented state transition matrix for both scalar and 
      multivariate cases. 
 
 2. **Unconditional Moments**  
@@ -39,44 +39,44 @@ Typically, these functions are called within higher-level filtering routines.
 """
 
 """
-    compute_mean_aug(mu::Real, Sigma::Real)
+    compute_mu_aug(mu::Real, Sigma::Real)
 
-Compute the augmented mean vector μ̃ for scalar case.
+Compute the augmented drift vector μ̃ for scalar case.
 
 # Arguments
 - `mu::Real`: Mean parameter
 - `Sigma::Real`: Variance parameter
 
 # Returns
-- `Vector`: Augmented mean vector [mu, mu² + Sigma]
+- `Vector`: Augmented drift vector [mu, mu² + Sigma]
 
 # Description
 Implements Proposition 3.1 to compute the augmented mean vector μ̃ = [mu, vec(mu*mu' + Sigma)]
 for the scalar case where mu and Sigma are real numbers.
 """
-function compute_mean_aug(mu::Real, Sigma::Real) 
+function compute_mu_aug(mu::Real, Sigma::Real) 
     return [mu; mu^2 + Sigma]
 end
 
 """
-    compute_mean_aug(mu::AbstractVector{T}, Sigma::AbstractMatrix{T}) where T <: Real
+    compute_mu_aug(mu::AbstractVector{T}, Sigma::AbstractMatrix{T}) where T <: Real
 
-Compute the augmented mean vector μ̃ for multivariate case.
+Compute the augmented drift vector μ̃ for multivariate case.
 
 # Arguments
 - `mu::AbstractVector{T}`: Mean vector of dimension N
 - `Sigma::AbstractMatrix{T}`: Covariance matrix of dimension N×N
 
 # Returns
-- `Vector{T}`: Augmented mean vector [mu; vec(mu*mu' + Sigma)] of dimension N + N²
+- `Vector{T}`: Augmented drift vector [mu; vec(mu*mu' + Sigma)] of dimension N + N²
 
 # Description
-Implements Proposition 3.1 to compute the augmented mean vector μ̃ = [mu; vec(mu*mu' + Sigma)]
+Implements Proposition 3.1 to compute the augmented drift vector μ̃ = [mu; vec(mu*mu' + Sigma)]
 for the multivariate case. The result combines:
 1. The original mean vector mu
 2. The vectorized sum of the outer product mu*mu' and covariance matrix Sigma
 """
-function compute_mean_aug(mu::AbstractVector{T}, Sigma::AbstractMatrix{T}) where T <: Real
+function compute_mu_aug(mu::AbstractVector{T}, Sigma::AbstractMatrix{T}) where T <: Real
     # First part: original mean vector mu
     first_part = mu
     
@@ -91,7 +91,7 @@ function compute_mean_aug(mu::AbstractVector{T}, Sigma::AbstractMatrix{T}) where
 end
 
 """
-    compute_aug_state_transition(mu::Real, Phi::Real)
+    compute_Phi_aug(mu::Real, Phi::Real)
 
 Compute the augmented state transition matrix Φ̃ for scalar case.
 
@@ -106,13 +106,13 @@ Compute the augmented state transition matrix Φ̃ for scalar case.
 Implements Proposition 3.1 to compute the augmented state transition matrix 
 Φ̃ = [Phi 0.0; (mu⊗Phi + Phi⊗mu), Phi⊗Phi] for the scalar case where mu and Phi are real numbers.
 """
-function compute_aug_state_transition(mu::Real, Phi::Real)
+function compute_Phi_aug(mu::Real, Phi::Real)
     # Prop. 3.1: Φ̃ = [Phi 0.0; (mu⊗Phi + Phi⊗mu), Phi⊗Phi]
     return [Phi 0.0; 2.0*mu*Phi Phi^2]
 end
 
 """
-    compute_aug_state_transition(mu::AbstractVector{T}, Phi::AbstractMatrix{T}) where T <: Real
+    compute_Phi_aug(mu::AbstractVector{T}, Phi::AbstractMatrix{T}) where T <: Real
 
 Compute the augmented state transition matrix Φ̃ for multivariate case.
 
@@ -131,7 +131,7 @@ Phi_aug = [Phi 0; (mu⊗Phi + Phi⊗mu), Phi⊗Phi] for the multivariate case wh
 - Bottom left block implements mu⊗Phi + Phi⊗mu 
 - Bottom right block implements Phi⊗Phi
 """
-function compute_aug_state_transition(mu::AbstractVector{T}, Phi::AbstractMatrix{T}) where T <: Real
+function compute_Phi_aug(mu::AbstractVector{T}, Phi::AbstractMatrix{T}) where T <: Real
     N = length(mu)
     P = N + N^2
 
@@ -408,22 +408,22 @@ function compute_cond_cov_state_aug(Z::AbstractVector{T1}, L1::AbstractMatrix{T2
 end
 
 """
-    compute_cond_cov_state(X::AbstractVector{T}, params::QKParams{T,T2}) where {T <: Real, T2 <: Real}
+    compute_cond_cov_state(X::AbstractVector{T}, model::QKModel{T,T2}) where {T <: Real, T2 <: Real}
 
 Compute the conditional covariance matrix of the state vector Xₜ for a VAR(1) process.
 
 # Arguments
 - `X::AbstractVector{T}`: Current state vector
-- `params::QKParams{T,T2}`: Parameters of the VAR(1) process
+- `model::QKModel{T,T2}`: Model parameters
 
 # Returns
 - `Matrix`: N×N conditional covariance matrix of the state
 """
-function compute_cond_cov_state(X::AbstractVector{T}, params::QKParams{T,T2}) where {T <: Real, T2 <: Real}
-    @unpack mu, Phi, Sigma, N = params.StateParams
-    @unpack Lambda = params.AugStateParams
+function compute_cond_cov_state(X::AbstractVector{T}, model::QKModel{T,T2}) where {T <: Real, T2 <: Real}
+    @unpack mu, Phi, Sigma, N = model.state
+    @unpack Lambda = model.aug_state
     N = length(mu)
-    Gamma = compute_Γₜ₋₁_old(X, mu, Phi)
+    Gamma = compute_Gamma_tm1(X, mu, Phi)
     Sigma_aug_11 = Sigma
     Sigma_aug_12 = Sigma * Gamma' 
     Sigma_aug_21 = Gamma * Sigma
@@ -471,7 +471,7 @@ function compute_aug_state_uncond_cov(Z::AbstractVector{T}, Sigma::Real, mu::Rea
 
     P = size(Phi_aug, 1)
     return reshape((I - kron(Phi_aug, Phi_aug)) \ 
-        vec(compute_Σ̃condZ(Z, Sigma, mu, Phi)), (P, P))
+        vec(compute_cond_cov_state_aug(Z, Sigma, mu, Phi)), (P, P))
 end
 
 """
@@ -502,7 +502,7 @@ function compute_aug_state_uncond_cov(aug_mean::AbstractVector{T1}, L1::Abstract
 
     P = size(Phi_aug, 1)
     return reshape((I - kron(Phi_aug, Phi_aug)) \ 
-        vec(compute_Σ̃condZ(aug_mean, L1, L2, L3, Lambda, Sigma, mu, Phi_aug)), (P, P))
+        vec(compute_cond_cov_state_aug(aug_mean, L1, L2, L3, Lambda, Sigma, mu, Phi_aug)), (P, P))
 end
 
 """
@@ -561,7 +561,7 @@ end
 
 """
     compute_Sigma_ttm1!(Sigma_ttm1::AbstractArray{Real, 3}, Z_tt::AbstractMatrix{T}, 
-                    params::QKParams{T,T2}, t::Int) where {T <: Real, T2 <: Real}
+                    model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
 
 Compute and store the conditional covariance matrix of the augmented state vector at time t 
 given information up to time t-1.
@@ -569,7 +569,7 @@ given information up to time t-1.
 # Arguments
 - `Sigma_ttm1::AbstractArray{Real, 3}`: Array to store the computed covariance matrix
 - `Z_tt::AbstractMatrix{T}`: Matrix of filtered state estimates
-- `params::QKParams{T,T2}`: Model parameters
+- `model::QKModel{T,T2}`: Model parameters
 - `t::Int`: Time index
 
 # Description
@@ -578,20 +578,20 @@ augmented state vector at time t and model parameters.
 """
 function compute_Sigma_ttm1!(Sigma_ttm1::AbstractArray{Real, 3}, Z_tt::AbstractMatrix{T},
     model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
-    @unpack mu, Sigma, Phi, N = model.StateParams
-    @unpack Lambda, L1, L2, L3, P, Phi_aug = model.AugStateParams
+    @unpack mu, Sigma, Phi, N = model.state
+    @unpack Lambda, L1, L2, L3, P, Phi_aug = model.aug_state
     Sigma_ttm1[:, :, t] .= compute_cond_cov_state_aug(Z_tt[:,t], L1, L2, L3, Lambda, Sigma, mu, Phi_aug)
 end
 
 """
-    compute_Sigma_ttm1(Z_tt::AbstractVector{T}, params::QKParams{T,T2}, t::Int) where {T <: Real, T2 <: Real}
+    compute_Sigma_ttm1(Z_tt::AbstractVector{T}, model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
 
 Compute the conditional covariance matrix of the augmented state vector at time t given 
 information up to time t-1.
 
 # Arguments
 - `Z_tt::AbstractVector{T}`: Vector of filtered state estimates
-- `params::QKParams{T,T2}`: Model parameters  
+- `model::QKModel{T,T2}`: Model parameters  
 - `t::Int`: Time index
 
 # Returns
@@ -601,10 +601,10 @@ information up to time t-1.
 Returns the conditional covariance computed using the augmented state vector at time t
 and model parameters.
 """
-function compute_Sigma_ttm1(Z_tt::AbstractVector{T}, model::QKModel{T,T2},t::Int) where {T <: Real, T2 <: Real}
+function compute_Sigma_ttm1(Z_tt::AbstractVector{T}, model::QKModel{T,T2}) where {T <: Real, T2 <: Real}
 
-    @unpack mu, Sigma, Phi, N = model.StateParams
-    @unpack Lambda, L1, L2, L3, P, Phi_aug = model.AugStateParams
+    @unpack mu, Sigma, Phi, N = model.state
+    @unpack Lambda, L1, L2, L3, P, Phi_aug = model.aug_state
 
-    return compute_cond_cov_state_aug(Z_tt[:,t], L1, L2, L3, Lambda, Sigma, mu, Phi_aug)
+    return compute_cond_cov_state_aug(Z_tt, L1, L2, L3, Lambda, Sigma, mu, Phi_aug)
 end

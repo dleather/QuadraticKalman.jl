@@ -7,7 +7,7 @@ using QuadraticKalman
         Y = rand(3, 5) # M=3, T̄=4
         data = QKData(Y)
         @test data.M == 3
-        @test data.T̄ == 4
+        @test data.T_bar == 4
         @test length(data.Y) == 15  # total elements
 
         # Invalid: single time step
@@ -18,7 +18,7 @@ using QuadraticKalman
         Y1d = rand(10)
         data1d = QKData(Y1d)
         @test data1d.M == 1
-        @test data1d.T̄ == 9
+        @test data1d.T_bar == 9
     end
 
     @testset "get_measurement" begin

@@ -7,27 +7,27 @@ import QuadraticKalman as QK  # Make sure these functions are exported or access
 
 @testset "Augmented Moments & Likelihood Tests" begin
 
-    @testset "compute_μ̃ tests" begin
+    @testset "compute_mu_aug tests" begin
         @testset "Scalar case" begin
             # If μ is scalar and Σ is also a scalar, compute_μ̃(μ, Σ) 
             # should return a 2-element vector: [μ, μ^2 + Σ].
             μ_scalar = 2.0
             Σ_scalar = 1.5
-            result = QK.compute_μ̃(μ_scalar, Σ_scalar)
+            result = QK.compute_mu_aug(μ_scalar, Σ_scalar)
             @test result ≈ [2.0, 2.0^2 + 1.5]  # [2, 5.5]
         end
 
         @testset "Multivariate case" begin
             # N=2
-            μ_vec = [1.0, 2.0]
-            Σ_mat = [1.0 0.2;
-                     0.2 2.0]
-            # compute_μ̃ should return a vector of length N + N^2 = 2 + 4 = 6.
-            result = QK.compute_μ̃(μ_vec, Σ_mat)
+            mu_vec = [1.0, 2.0]
+            Sigma_mat = [1.0 0.2;
+                        0.2 2.0]
+            # compute_mu_aug should return a vector of length N + N^2 = 2 + 4 = 6.
+            result = QK.compute_mu_aug(mu_vec, Sigma_mat)
             @test length(result) == 6
 
             # Check first part is just μ
-            @test result[1:2] ≈ μ_vec
+            @test result[1:2] ≈ mu_vec
             # Check next part is vec(μμ' + Σ)
             # i.e. vectorize( [1.0 2.0; 2.0 4.0] + [1.0 0.2; 0.2 2.0] ) = ...
             # mmᵗ = [1*1 1*2; 2*1 2*2] = [1 2; 2 4]
@@ -39,25 +39,25 @@ import QuadraticKalman as QK  # Make sure these functions are exported or access
         end
     end
 
-    @testset "compute_Φ̃ tests" begin
+    @testset "compute_Phi_aug tests" begin
         @testset "Scalar case" begin
             # For scalar μ, Φ, the formula is:
             # Φ̃ = [Φ  0; 2μΦ  Φ^2]
-            μs = 1.5
-            Φs = 0.8
-            Φ̃ = QK.compute_Φ̃(μs, Φs)
+            mu_s = 1.5
+            Phi_s = 0.8
+                Phi_aug = QK.compute_Phi_aug(mu_s, Phi_s)
             # Should be a 2x2:
-            @test size(Φ̃) == (2,2)
-            @test Φ̃ ≈ [0.8  0.0;
-                        2*1.5*0.8  0.8^2]
+            @test size(Phi_aug) == (2,2)
+            @test Phi_aug ≈ [0.8  0.0;
+                            2*1.5*0.8  0.8^2]
         end
 
         @testset "Multivariate case" begin
             # N=2
-            μ_vec = [1.0, 2.0]
-            Φ_mat = [0.8  0.1;
+            mu_vec = [1.0, 2.0]
+            Phi_mat = [0.8  0.1;
                      0.05 0.9]
-            result = QK.compute_Φ̃(μ_vec, Φ_mat)
+            result = QK.compute_Phi_aug(mu_vec, Phi_mat)
             # Should be (N+N^2) x (N+N^2) = 6 x 6 for N=2
             @test size(result) == (6,6)
         end
@@ -65,12 +65,12 @@ import QuadraticKalman as QK  # Make sure these functions are exported or access
 
     @testset "compute_L1, L2, L3 tests" begin
         # We'll do a small N=2 example
-        Σ = [1.0  0.3;
-             0.3 0.8]
-        Λ = QK.compute_Λ(2)  # e.g. 4×4 commutation
-        L1_mat = QK.compute_L1(Σ, Λ)
-        L2_mat = QK.compute_L2(Σ, Λ)
-        L3_mat = QK.compute_L3(Σ, Λ)
+        Sigma_mat = [1.0  0.3;
+                     0.3 0.8]
+        Lambda = QK.compute_Lambda(2)  # e.g. 4×4 commutation
+        L1_mat = QK.compute_L1(Sigma_mat, Lambda)
+        L2_mat = QK.compute_L2(Sigma_mat, Lambda)
+        L3_mat = QK.compute_L3(Sigma_mat, Lambda)
 
         # Just check that they have expected sizes. 
         # The exact shape may depend on your definitions. 

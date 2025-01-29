@@ -4,15 +4,67 @@
 Container for outputs from the Quadratic Kalman Filter.
 """
 struct FilterOutput{T<:Real}
-    llₜ::Vector{T}
-    Zₜₜ::Matrix{T}
-    Pₜₜ::Array{T,3}
-    Yₜₜ₋₁::Union{Vector{T}, Matrix{T}}  # Allow for both vector and matrix measurements
-    Mₜₜ₋₁::Array{T,3}
-    Kₜ::Array{T,3}
-    Zₜₜ₋₁::Matrix{T}
-    Pₜₜ₋₁::Array{T,3}
-    Σₜₜ₋₁::Array{T,3}
+    ll_t::Vector{T}
+    Z_tt::Matrix{T}
+    P_tt::Array{T,3}
+    Y_tt_minus_1::Union{Vector{T}, Matrix{T}}  # Allow for both vector and matrix measurements
+    M_tt_minus_1::Array{T,3}
+    K_tt::Array{T,3}
+    Z_ttm1::Matrix{T}
+    P_ttm1::Array{T,3}
+    Sigma_ttm1::Array{T,3}
+end
+
+# Constructor for Vector measurement case (QKData{T1,1})
+function FilterOutput(output_tuple::NamedTuple{(:ll_t, :Z_tt, :P_tt, :Y_tt_minus_1, :M_tt_minus_1, :K_tt,
+    :Z_ttm1, :P_ttm1, :Sigma_ttm1)})
+    
+    return FilterOutput(
+        output_tuple.ll_t,
+        output_tuple.Z_tt,
+        output_tuple.P_tt,
+        output_tuple.Y_tt_minus_1,
+        output_tuple.M_tt_minus_1,
+        output_tuple.K_tt,
+        output_tuple.Z_ttm1,
+        output_tuple.P_ttm1,
+        output_tuple.Sigma_ttm1
+    )
+end
+
+# Constructor for Matrix measurement case (QKData{T,2})
+function FilterOutput(output_tuple::NamedTuple{(:ll_t, :Z_tt, :P_tt, :Y_tt_minus_1, :M_tt_minus_1, :K_tt,
+    :Z_ttm1, :P_ttm1, :Sigma_ttm1)})
+    T = eltype(output_tuple.Zₜₜ)
+    return FilterOutput(
+        output_tuple.ll_t,
+        output_tuple.Z_tt,
+        output_tuple.P_tt,
+        output_tuple.Y_tt_minus_1,
+        output_tuple.M_tt_minus_1,
+        output_tuple.K_tt,
+        output_tuple.Z_ttm1,
+        output_tuple.P_ttm1,
+        zeros(T, size(output_tuple.P_ttm1))  # Empty Σₜₜ₋₁ for this case
+    )
+end
+
+# Constructor for functional filter case
+function FilterOutput(ll_t::Vector{T}, Z_tt::Matrix{T}, P_tt::Array{T,3}) where T<:Real
+    P, Tp1 = size(Z_tt)
+    T̄ = Tp1 - 1
+    
+    return FilterOutput(
+        ll_t,
+        Z_tt,
+        P_tt,
+        Vector{T}(undef, 0),        # Empty Yₜₜ₋₁
+        Array{T,3}(undef, 0, 0, 0), # Empty Mₜₜ₋₁
+        Array{T,3}(undef, 0, 0, 0), # Empty Kₜ
+        Matrix{T}(undef, 0, 0),     # Empty Zₜₜ₋₁
+        Array{T,3}(undef, 0, 0, 0), # Empty Pₜₜ₋₁
+        Array{T,3}(undef, 0, 0, 0)  # Empty Σₜₜ₋₁
+    )
 end
 
 """
@@ -21,12 +73,20 @@ end
 Container for outputs from the Quadratic Kalman Smoother.
 
 # Fields
-- `Zₜₜ_smooth::Matrix{T}`: Smoothed states (P × (T̄+1))
-- `Pₜₜ_smooth::Array{T,3}`: Smoothed covariances (P × P × (T̄+1))
+- `Z_smooth::Matrix{T}`: Smoothed states (P × (T̄+1))
+- `P_smooth::Array{T,3}`: Smoothed covariances (P × P × (T̄+1))
 """
 struct SmootherOutput{T<:Real}
-    Zₜₜ_smooth::Matrix{T}
-    Pₜₜ_smooth::Array{T,3}
+    Z_smooth::Matrix{T}
+    P_smooth::Array{T, 3}
+end
+
+# Constructor
+function SmootherOutput(output_tuple::NamedTuple)
+    return SmootherOutput(
+        output_tuple.Z_smooth,
+        output_tuple.P_smooth
+    )
 end
 
 """
@@ -38,70 +98,15 @@ Combined container for both filter and smoother outputs.
 - `filter::FilterOutput{T}`: Results from the filter
 - `smoother::SmootherOutput{T}`: Results from the smoother
 """
-struct QKFOutput{T<:Real}
+@with_kw struct QKFOutput{T<:Real}
     filter::FilterOutput{T}
     smoother::SmootherOutput{T}
 end
 
-# Constructor for Vector measurement case (QKData{T1,1})
-function FilterOutput(output_tuple::NamedTuple{(:llₜ, :Zₜₜ, :Pₜₜ, :Yₜₜ₋₁, :Mₜₜ₋₁, :Kₜ, :Zₜₜ₋₁, :Pₜₜ₋₁, :Σₜₜ₋₁)})
-    return FilterOutput(
-        output_tuple.llₜ,
-        output_tuple.Zₜₜ,
-        output_tuple.Pₜₜ,
-        output_tuple.Yₜₜ₋₁,
-        output_tuple.Mₜₜ₋₁,
-        output_tuple.Kₜ,
-        output_tuple.Zₜₜ₋₁,
-        output_tuple.Pₜₜ₋₁,
-        output_tuple.Σₜₜ₋₁
-    )
-end
-
-# Constructor for Matrix measurement case (QKData{T,2})
-function FilterOutput(output_tuple::NamedTuple{(:llₜ, :Zₜₜ, :Pₜₜ, :Yₜₜ₋₁, :Mₜₜ₋₁, :Kₜ, :Zₜₜ₋₁, :Pₜₜ₋₁)})
-    T = eltype(output_tuple.Zₜₜ)
-    return FilterOutput(
-        output_tuple.llₜ,
-        output_tuple.Zₜₜ,
-        output_tuple.Pₜₜ,
-        output_tuple.Yₜₜ₋₁,
-        output_tuple.Mₜₜ₋₁,
-        output_tuple.Kₜ,
-        output_tuple.Zₜₜ₋₁,
-        output_tuple.Pₜₜ₋₁,
-        zeros(T, size(output_tuple.Pₜₜ₋₁))  # Empty Σₜₜ₋₁ for this case
-    )
-end
-
-# Constructor for functional filter case
-function FilterOutput(llₜ::Vector{T}, Zₜₜ::Matrix{T}, Pₜₜ::Array{T,3}) where T<:Real
-    P, Tp1 = size(Zₜₜ)
-    T̄ = Tp1 - 1
-    
-    return FilterOutput(
-        llₜ,
-        Zₜₜ,
-        Pₜₜ,
-        Vector{T}(undef, 0),        # Empty Yₜₜ₋₁
-        Array{T,3}(undef, 0, 0, 0), # Empty Mₜₜ₋₁
-        Array{T,3}(undef, 0, 0, 0), # Empty Kₜ
-        Matrix{T}(undef, 0, 0),     # Empty Zₜₜ₋₁
-        Array{T,3}(undef, 0, 0, 0), # Empty Pₜₜ₋₁
-        Array{T,3}(undef, 0, 0, 0)  # Empty Σₜₜ₋₁
-    )
-end
-
-function SmootherOutput(output_tuple::NamedTuple)
-    return SmootherOutput(
-        output_tuple.Zₜₜ_smooth,
-        output_tuple.Pₜₜ_smooth
-    )
-end
-
-function QKFOutput(filter_out::FilterOutput{T}, smoother_out::SmootherOutput{T}) where T<:Real
-    return QKFOutput{T}(filter_out, smoother_out)
-end
+# Contructor
+#function QKFOutput(filter_out::FilterOutput{T}, smoother_out::SmootherOutput{T}) where T<:Real
+#    return QKFOutput{T}(filter_out, smoother_out)
+#end
 
 # Export the types
-export FilterOutput, SmootherOutput, QKFOutput
+#export FilterOutput, SmootherOutput, QKFOutput

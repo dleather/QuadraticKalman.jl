@@ -24,7 +24,7 @@ in vectorized operations:
    - Computes the "half-vectorization" of a symmetric matrix, returning a 
      vector of its lower-triangular elements.
 
-4. **`compute_H̃(N::Int, H::AbstractMatrix{T})`** and **`compute_G̃(N::Int, G::AbstractMatrix{T})`**  
+4. **`compute_H_aug(N::Int, H::AbstractMatrix{T})`** and **`compute_G_aug(N::Int, G::AbstractMatrix{T})`**  
    - Generate the **augmented** selection (`H̃`) and duplication (`G̃`) matrices
      used in certain smoothing or state‐space algorithms. They embed the original
      `H` or `G` in a block-structured matrix that handles both the state vector 
@@ -42,8 +42,8 @@ D = duplication_matrix(4)   # reconstructs from half-vectorization
 h_vec = vech(symmetric_mat) # half-vectorize a 4×4
 
 # augmented forms for state-space transformations
-H_tilde = compute_H̃(N, S)
-G_tilde = compute_G̃(N, D)
+H_aug = compute_H_aug(N, S)
+G_aug = compute_G_aug(N, D)
 ```
 """
 
@@ -125,7 +125,7 @@ function duplication_matrix(n::Int, ::Type{T}=Float64) where T <: Real
 end
 
 """
-    compute_H̃(N::Int, H::AbstractMatrix{T}) where T <: Real
+    compute_H_aug(N::Int, H::AbstractMatrix{T}) where T <: Real
 
 Compute the augmented selection matrix H̃ used in the smoothing algorithm.
 
@@ -146,7 +146,7 @@ Constructs the augmented selection matrix H̃ by combining:
 The augmented matrix H̃ is used to transform between vectorized and half-vectorized 
 representations in the smoothing algorithm while preserving symmetry.
 """
-function compute_H̃(N::Int, H::AbstractMatrix{T}) where T <: Real
+function compute_H_aug(N::Int, H::AbstractMatrix{T}) where T <: Real
     n_rows = Int((N * (N + 3)) / 2)
     n_cols = N * (N + 1)
     # Create the identity matrix part
@@ -165,11 +165,11 @@ function compute_H̃(N::Int, H::AbstractMatrix{T}) where T <: Real
         bottom_left bottom_right
     ]
     
-    return H̃
+    return H_aug
 end
 
 """
-    compute_G̃(N::Int, G::AbstractMatrix{T}) where T <: Real
+    compute_G_aug(N::Int, G::AbstractMatrix{T}) where T <: Real
 
 Compute the augmented duplication matrix G̃ used in the smoothing algorithm.
 
@@ -180,7 +180,7 @@ Compute the augmented duplication matrix G̃ used in the smoothing algorithm.
 # Returns
 - Matrix{T}: Augmented duplication matrix G̃ of size (N*(N+1)) × ((N*(N+3))/2)
 """
-function compute_G̃(N::Int, G::AbstractMatrix{T}) where T <: Real
+function compute_G_aug(N::Int, G::AbstractMatrix{T}) where T <: Real
     n_rows = N * (N + 1)
     n_cols = Int((N * (N + 3)) / 2)
     # Create the identity matrix part
@@ -194,12 +194,12 @@ function compute_G̃(N::Int, G::AbstractMatrix{T}) where T <: Real
     bottom_left = zeros(T, n_rows - N, N)
     
     # Combine all parts
-    G̃ = [
+    G_aug = [
         top_left    top_right;
         bottom_left bottom_right
     ]
     
-    return G̃
+    return G_aug
 end
 
 """
@@ -228,4 +228,4 @@ function vech(mat::AbstractMatrix{T}) where T <: Real
     return [mat[i, j] for (i, j) in indices]
 end
 
-export selection_matrix, duplication_matrix, vech, compute_H̃, compute_G̃
+#xport selection_matrix, duplication_matrix, vech, compute_H̃, compute_G̃

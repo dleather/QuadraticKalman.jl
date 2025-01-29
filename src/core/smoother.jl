@@ -1,12 +1,12 @@
 
 """
     qkf_smoother!(
-        Z::AbstractMatrix{T},      # Filtered states   (P × (T̄+1))
-        P::AbstractArray{T, 3},    # Filtered covariances (P × P × (T̄+1))
-        Z_pred::AbstractMatrix{T}, # One-step-ahead predicted states (P × T̄)
+        Z::AbstractMatrix{T},      # Filtered states   (P × (T_bar+1))
+        P::AbstractArray{T, 3},    # Filtered covariances (P × P × (T_bar+1))
+        Z_pred::AbstractMatrix{T}, # One-step-ahead predicted states (P × T_bar)
         P_pred::AbstractArray{T,3},
-        T̄::Int,
-        Hn::Matrix{T},  Gn::Matrix{T},  H̃::Matrix{T},  Φ̃::Matrix{T},
+        T_bar::Int,
+        Hn::Matrix{T},  Gn::Matrix{T},  H_aug::Matrix{T},  Φ_aug::Matrix{T},
         dof::Int
     ) where {T<:Real}
 
@@ -14,12 +14,12 @@ Perform **in-place** backward smoothing for the Quadratic Kalman Filter (QKF).
 
 # Description
 
-Given the forward-filtered estimates `(Z, P)` from `t=1..T̄`, plus the 
+Given the forward-filtered estimates `(Z, P)` from `t=1..T_bar`, plus the 
 one-step-ahead predictions `(Z_pred, P_pred)` and the special matrices 
-(H̃ₙ, G̃ₙ) that handle the dimension reduction via 
+(H_aug, G_aug) that handle the dimension reduction via 
 Vech(·)/Vec(·), this function computes `Z[:,t]` and `P[:,:,t]` for 
-`t = T̄-1 .. 1` in backward fashion to produce the smoothed estimates 
-(Zₜ|T, PZₜ|T).  
+`t = T_bar-1 .. 1` in backward fashion to produce the smoothed estimates 
+(Zₜ|T_bar, PZₜ|T_bar).  
 
 ## Mathematical Form (Backward Pass)
 
@@ -45,18 +45,18 @@ Vech(·)/Vec(·), this function computes `Z[:,t]` and `P[:,:,t]` for
 - `Z_pred::AbstractMatrix{T}`, `P_pred::AbstractArray{T,3}`: 
   The one-step-ahead predicted states/covariances from the forward pass,
   i.e. `Z_pred[:,t] = Zₜ|ₜ`, `P_pred[:,:,t] = P^Zₜ|ₜ`.
-- `T̄::Int`: Total time steps (excluding time 0).
+- `T_bar::Int`: Total time steps (excluding time 0).
 - `Hn::Matrix{T}`, `Gn::Matrix{T}`: The selection/duplication operators 
   for Vec/Vech transforms of block `(x xᵀ)`. Usually size `(n(n+1) × n(n+3)/2)` or similarly.
-- `H̃::Matrix{T}`, `Φ̃::Matrix{T}`: The augmented versions 
-  (H̃ₙ, G̃ₙ) used in the QKF recursion.
+- `H_aug::Matrix{T}`, `Φ_aug::Matrix{T}`: The augmented versions 
+  (H_aug, G_aug) used in the QKF recursion.
 - `dof::Int`: Dimension parameter (often `n` or `P`). Adjust to your model.
 
 # Notes
 
-- This function runs backward from `t = T̄-1` down to `t = 1`, using 
-  the final values `(Z[:, T̄], P[:,:, T̄])` as the terminal condition 
-  (`Z_{T̄|T̄}, P^Z_{T̄|T̄}`).
+- This function runs backward from `t = T_bar-1` down to `t = 1`, using 
+  the final values `(Z[:, T_bar], P[:,:, T_bar])` as the terminal condition 
+  (`Z_{T_bar|T_bar}, P^Z_{T_bar|T_bar}`).
 - If your AD library supports destructive updates, this approach should 
   be AD-friendly; if not, consider the out-of-place version `qkf_smoother`.
 
@@ -64,12 +64,12 @@ Vech(·)/Vec(·), this function computes `Z[:,t]` and `P[:,:,t]` for
 Suppose you already ran the forward filter, so you have:
     Z, P, Z_pred, P_pred, plus your special matrices.
 ```
-qkf_smoother!(Z, P, Z_pred, P_pred, T̄, Hn, Gn, H̃, Φ̃, n)
+qkf_smoother!(Z, P, Z_pred, P_pred, T_bar, Hn, Gn, H_aug, Φ_aug, n)
 ```
 """
 function qkf_smoother!(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
-    Z_pred::AbstractMatrix{T}, P_pred::AbstractArray{T,3}, T̄::Int,
-    G̃::AbstractMatrix{T}, H̃::AbstractMatrix{T}, Φ̃::AbstractMatrix{T},
+    Z_pred::AbstractMatrix{T}, P_pred::AbstractArray{T,3}, T_bar::Int,
+    G_aug::AbstractMatrix{T}, H_aug::AbstractMatrix{T}, Φ_aug::AbstractMatrix{T},
     dof::Int) where {T <: Real}
 
     @assert size(Z,2) == T̄ + 1 "Z should have T̄+1 columns"
@@ -77,26 +77,26 @@ function qkf_smoother!(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
     @assert size(Z_pred,2) == T̄ "Z_pred should have T̄ columns"
     @assert size(P_pred,3) == T̄ "P_pred should have T̄ slices"
     
-    # Work backward from t=T̄-1 down to t=1
-    for t in (T̄-1):-1:1
+    # Work backward from t=T_bar-1 down to t=1
+    for t in (T_bar-1):-1:1
         # 1) Transform P^Z_{t|t} and P^Z_{t+1|t} with H̃
         #    We want: M_t   = ( H̃ * P^Z_{t|t} * H̃' )
-        #             M_t+1 = ( H̃ * P^Z_{t+1|t} * H̃' )
-        M_t   = H̃ * P[:,:,t]   * H̃'
-        M_t1  = H̃ * P_pred[:,:,t] * H̃'
+        #             M_t+1 = ( H_aug * P^Z_{t+1|t} * H_aug' )
+        M_t   = H_aug * P[:,:,t]   * H_aug'
+        M_t1  = H_aug * P_pred[:,:,t] * H_aug'
     
         # 2) Also transform states
-        #    hZ_t   = (H̃ * Z[:, t])
-        #    hZ_t+1 = (H̃ * Z_pred[:, t]) for the predicted,
+        #    hZ_t   = (H_aug * Z[:, t])
+        #    hZ_t+1 = (H_aug * Z_pred[:, t]) for the predicted,
         #             or use the smoothed Z_{t+1|T} if it is already updated
-        hZ_t   = H̃ * Z[:,t]
-        hZ_t1  = H̃ * Z[:,t+1]   # after smoothing pass (Z_{t+1|T})
-        hZ_t1p = H̃ * Z_pred[:,t]  # Z_{t+1|t} from forward filter
+        hZ_t   = H_aug * Z[:,t]
+        hZ_t1  = H_aug * Z[:,t+1]   # after smoothing pass (Z_{t+1|T})
+        hZ_t1p = H_aug * Z_pred[:,t]  # Z_{t+1|t} from forward filter
     
         # 3) Form the cross term: (tilde{H}_n * tilde{\Phi} * tilde{G}_n)'
         #    We'll store it if needed or do direct multiplication inline.
-        #    Typically: cross = (H̃ * Φ̃ * Gn)' 
-        cross = (H̃ * Φ̃ * G̃)'
+        #    Typically: cross = (H_aug * Φ_aug * G_aug)' 
+        cross = (H_aug * Φ_aug * G_aug)'
     
         # 4) Now compute F_t = M_t * cross * (M_t1)^-1
         #    But we use a solve: F_t = M_t * cross * (M_t1 \ I)
@@ -158,7 +158,7 @@ function qkf_smoother!(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
 end
 
 """
-    qkf_smoother( Z, P, Z_pred, P_pred, T̄, Hn, Gn, H̃, Φ̃, dof ) -> (Z_smooth, P_smooth)
+    qkf_smoother( Z, P, Z_pred, P_pred, T_bar, H_aug, G_aug, Φ_aug, dof ) -> (Z_smooth, P_smooth)
 
 Out-of-place version of the QKF smoother. Returns new arrays rather than overwriting the input ones.
     
@@ -177,9 +177,9 @@ Z_smooth, P_smooth = qkf_smoother(Z, P, Z_pred, P_pred, T̄, Hn, Gn, H̃, Φ̃, 
 ```
 """ 
 function qkf_smoother(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
-    Z_pred::AbstractMatrix{T}, P_pred::AbstractArray{T,3}, T̄::Int,
-    G̃::AbstractMatrix{T}, H̃::AbstractMatrix{T},
-    Φ̃::AbstractMatrix{T}, dof::Int) where {T<:Real}
+    Z_pred::AbstractMatrix{T}, P_pred::AbstractArray{T,3}, T_bar::Int,
+    G_aug::AbstractMatrix{T}, H_aug::AbstractMatrix{T},
+    Φ_aug::AbstractMatrix{T}, dof::Int) where {T<:Real}
 
     # Make copies (or a deep copy if needed)
     Z_smooth = copy(Z)
@@ -187,28 +187,28 @@ function qkf_smoother(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
     P_smooth .= P  # replicate the filtered covariances
 
     # Just call the in-place version on the copies:
-    qkf_smoother!(Z_smooth, P_smooth, Z_pred, P_pred, T̄, G̃, H̃, Φ̃, dof)
+    qkf_smoother!(Z_smooth, P_smooth, Z_pred, P_pred, T_bar, G_aug, H_aug, Φ_aug, dof)
 
     return (copy(Z_smooth), copy(P_smooth))
 
 end
 
 """
-    qkf_smoother!(filter_output::FilterOutput{T}, params::QKParams{T,T2}) where {T<:Real, T2<:Real}
+    qkf_smoother!(filter_output::FilterOutput{T}, model::QKModel{T,T2}) where {T<:Real, T2<:Real}
 
 In-place backward smoothing for the QKF using filter outputs.
 """
-function qkf_smoother!(filter_output::FilterOutput{T}, params::QKParams{T,T2}) where {T<:Real, T2<:Real}
-    @unpack Zₜₜ, Pₜₜ, Zₜₜ₋₁, Pₜₜ₋₁ = filter_output
-    @unpack H̃, G̃, Φ̃ = params
-    T̄ = size(Zₜₜ, 2) - 1
+function qkf_smoother!(filter_output::FilterOutput{T}, model::QKModel{T,T2}) where {T<:Real, T2<:Real}
+    @unpack Z_tt, P_tt, Z_ttm1, P_ttm1 = filter_output
+    @unpack H_aug, G_aug, Φ_aug = model.AugStateParams
+    T_bar = size(Z_tt, 2) - 1
     
     # Make copies to store smoothed results
-    Z_smooth = copy(Zₜₜ)
-    P_smooth = copy(Pₜₜ)
+    Z_smooth = copy(Z_tt)
+    P_smooth = copy(P_tt)
     
     # Call original smoother implementation
-    qkf_smoother!(Z_smooth, P_smooth, Zₜₜ₋₁, Pₜₜ₋₁, T̄, G̃, H̃, Φ̃, N)
+    qkf_smoother!(Z_smooth, P_smooth, Z_ttm1, P_ttm1, T_bar, G_aug, H_aug, Φ_aug, N)
     
     return SmootherOutput(Z_smooth, P_smooth)
 end
@@ -219,18 +219,18 @@ end
 Out-of-place backward smoothing for the QKF using filter outputs.
 """
 function qkf_smoother(filter_output::FilterOutput{T},
-    params::QKParams{T,T2}) where {T<:Real, T2<:Real}
+    model::QKModel{T,T2}) where {T<:Real, T2<:Real}
 
-    @unpack Zₜₜ, Pₜₜ, Zₜₜ₋₁, Pₜₜ₋₁ = filter_output
-    @unpack H̃, G̃, Φ̃ = params
-    T̄ = size(Zₜₜ, 2) - 1
+    @unpack Z_tt, P_tt, Z_ttm1, P_ttm1 = filter_output
+    @unpack H_aug, G_aug, Φ_aug = model.AugStateParams
+    T_bar = size(Z_tt, 2) - 1
 
     # Make copies for the smoothed results
-    Z_smooth = copy(Zₜₜ)
-    P_smooth = copy(Pₜₜ)
+    Z_smooth = copy(Z_tt)
+    P_smooth = copy(P_tt)
     
     # Call in-place version on copies
-    qkf_smoother!(Z_smooth, P_smooth, Zₜₜ₋₁, Pₜₜ₋₁, T̄, G̃, H̃, Φ̃, N)
+    qkf_smoother!(Z_smooth, P_smooth, Z_ttm1, P_ttm1, T_bar, G_aug, H_aug, Φ_aug, N)
     
     # Return fresh copies for AD
     return SmootherOutput(copy(Z_smooth), copy(P_smooth))
@@ -242,15 +242,15 @@ end
 
 Run both QKF filter and smoother, returning combined results.
 """
-function qkf(data::QKData{T1,N}, params::QKParams{T,T2}) where {T1, T, T2, N}
+function qkf(data::QKData{T1,N}, model::QKModel{T,T2}) where {T1, T, T2, N}
     # Run filter
-    filter_output = qkf_filter(data, params)
+    filter_output = qkf_filter(data, model)
     
     # Run smoother
-    smoother_output = qkf_smoother(filter_output, params)
+    smoother_output = qkf_smoother(filter_output, model)
     
     # Return combined results
-    return QKFOutput(filter_output, smoother_output)
+    return QKFOutput{T}(filter_output, smoother_output)
 end
 
-export qkf_smoother!, qkf_smoother, qkf
+#export qkf_smoother!, qkf_smoother, qkf

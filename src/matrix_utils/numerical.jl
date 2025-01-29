@@ -64,8 +64,8 @@ smooth_max(x, t) = ( (x + t) + √((x - t)² + √(ε)) ) / 2
 ```
 where `ε` is a small constant (default is `1e-8`).
 """
-function smooth_max(x::Real; threshold::Real=1e-8)
-    return ((x + threshold) + sqrt((x - threshold)^2 + sqrt(eps()))) / 2.0
+function smooth_max(x::T; threshold::Float64=1e-8) where T <: Real
+    return ((x + threshold) + sqrt((x - threshold)^2 + sqrt(eps(Float64)))) / 2.0
 end
 
 """
@@ -158,7 +158,7 @@ function make_positive_definite(A::AbstractMatrix{T}; clamp_threshold::Real=1e-8
     eig_vals, eig_vecs = d_eigen(A_tmp; assume_symmetric=true)
 
     # 3) Smooth clamp each eigenvalue
-    corrected_eigvals = smooth_max.(eig_vals, clamp_threshold)
+    corrected_eigvals = smooth_max.(eig_vals; threshold = clamp_threshold)
 
     # 4) Reconstruct and symmetrize
     corrected_A_tmp = eig_vecs * Diagonal(corrected_eigvals) * eig_vecs'
@@ -237,5 +237,5 @@ function issymmetric(mat::AbstractMatrix{T}) where T <: Real
     return all(mat .≈ mat')
 end
 
-export spectral_radius, make_positive_definite, make_symmetric, ensure_positive_definite,
-    issymmetric
+#export spectral_radius, make_positive_definite, make_symmetric, ensure_positive_definite,
+#    issymmetric

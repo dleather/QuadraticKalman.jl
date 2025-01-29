@@ -46,6 +46,7 @@ Augmented Observation Equation:
 # Import types
 include("types/parameters.jl")
 include("types/data.jl")
+include("types/outputs.jl")
 
 # Import matrix utilities
 include("matrix_utils/commutation.jl")
@@ -59,11 +60,10 @@ include("core/filter.jl")
 include("core/smoother.jl")
 
 # From types/
-export QKParams, QKData
+export QKParams, QKData, FilterOutput, SmootherOutput, QKFOutput, get_measurement
 
 # From matrix_utils/
-export compute_Λ, compute_e,
-       selection_matrix, duplication_matrix, vech,
+export compute_Λ, compute_e, selection_matrix, duplication_matrix, vech,
        spectral_radius, make_positive_definite, make_symmetric
 
 # From core/

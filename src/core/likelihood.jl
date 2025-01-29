@@ -1,18 +1,18 @@
 """
-    log_pdf_normal(μ::Real, σ²::Real, x::Real) -> Real
+    log_pdf_normal(mu::Real, sigma2::Real, x::Real) -> Real
 
 Compute the log of the probability density function (PDF) of a **univariate normal** 
-distribution with mean `μ` and variance `σ²` at point `x`. 
+distribution with mean `mu` and variance `sigma2` at point `x`. 
 
 # Arguments
-- `μ::Real`: The mean of the normal distribution
-- `σ²::Real`: The variance (σ²) of the normal distribution
+- `mu::Real`: The mean of the normal distribution
+- `sigma2::Real`: The variance (σ²) of the normal distribution
 - `x::Real`: The point at which to evaluate the log PDF
 
 # Returns
 - A `Real` value representing the log PDF at `x`. 
-  - If `σ² > 0`, it computes `-0.5 * log(2π * σ²) - 0.5 * ((x-μ)^2 / σ²)`.
-  - Otherwise (if `σ² ≤ 0`), it returns `-Inf`, signaling effectively zero probability.
+  - If `sigma2 > 0`, it computes `-0.5 * log(2π * sigma2) - 0.5 * ((x-mu)^2 / sigma2)`.
+  - Otherwise (if `sigma2 ≤ 0`), it returns `-Inf`, signaling effectively zero probability.
 
 # Notes
 - Returning `-Inf` for non-positive variances can help keep downstream algorithms
@@ -21,8 +21,8 @@ distribution with mean `μ` and variance `σ²` at point `x`.
 - If negative variances are genuinely impossible (or indicative of a deeper error), 
   you could use an assertion or throw an error instead.
 """
-log_pdf_normal(μ::Real, σ2::Real, x::Real) = 
-    σ2 > 0 ? (-0.5 * log(2π * σ2) - 0.5*((x - μ)^2 / σ2)) : -Inf
+log_pdf_normal(mu::Real, sigma2::Real, x::Real) = 
+    sigma2 > 0 ? (-0.5 * log(2π * sigma2) - 0.5*((x - mu)^2 / sigma2)) : -Inf
 
 """
     compute_loglik!(lls::AbstractVector{T}, Y::AbstractVector{T},
@@ -45,14 +45,14 @@ In-place computation of the log-likelihood for **univariate** observations.
   Current time index (1-based).
 
 # Details
-1. Extracts `σ² = Mpred[1,1,t]`.
-2. Extracts `μ = Ypred[t]` (predicted mean).
+1. Extracts `sigma2 = Mpred[1,1,t]`.
+2. Extracts `mu = Ypred[t]` (predicted mean).
 3. Extracts `x = Y[t]` (actual observation).
-4. Computes `ll = log_pdf_normal(μ, σ², x)`.
+4. Computes `ll = log_pdf_normal(mu, sigma2, x)`.
 5. Stores `lls[t] = ll`.
 
-If `σ²` is negative or zero, `log_pdf_normal` may return `-Inf`. 
-In a well-behaved filter, `σ²` should be positive.
+If `sigma2` is negative or zero, `log_pdf_normal` may return `-Inf`. 
+In a well-behaved filter, `sigma2` should be positive.
 """
 function compute_loglik!(lls::AbstractVector{T}, 
                          Y::AbstractVector{T},
@@ -64,17 +64,17 @@ function compute_loglik!(lls::AbstractVector{T},
     @assert t <= size(Mpred,3) "Index t out of range for Mpred"
     @assert t <= length(Y) && t <= length(Ypred) && t <= length(lls)
 
-    σ2 = Mpred[1,1,t]
-    μ  = Ypred[t]
+    sigma2 = Mpred[1,1,t]
+    mu  = Ypred[t]
     x  = Y[t]
 
     # Possibly clamp small or negative σ² to a small epsilon
-    eps_σ2 = 1e-12
-    if σ2 <= eps_σ2
-        σ2 = eps_σ2
+    eps_sigma2 = 1e-12
+    if sigma2 <= eps_sigma2
+        sigma2 = eps_sigma2
     end
 
-    lls[t] = log_pdf_normal(μ, σ2, x)
+    lls[t] = log_pdf_normal(mu, sigma2, x)
 end
 
 
@@ -87,32 +87,32 @@ Compute the log-likelihood for a **single** univariate observation at one time s
 - `Y::Real`: The actual observation value.
 - `Ypred::Real`: The predicted observation (mean).
 - `Mpred::AbstractMatrix{T}`: A 1×1 matrix storing the variance at this time step,
-                              i.e. `Mpred[1,1] = σ²`.
+                              i.e. `Mpred[1,1] = sigma2`.
 
 # Returns
 The log-likelihood `Float64` (or `T`) computed using `log_pdf_normal(μ, σ², x)`.
 
 # Details
-1. Extracts `σ² = Mpred[1,1]`.
-2. Uses `Ypred` as the mean `μ`.
+1. Extracts `sigma2 = Mpred[1,1]`.
+2. Uses `Ypred` as the mean `mu`.
 3. Uses `Y` as the observation `x`.
-4. If `σ²` is <= 0, clamps it to a tiny positive `1e-12` to avoid domain error.
-5. Calls `log_pdf_normal(μ, σ², x)` and returns the result.
+4. If `sigma2` is <= 0, clamps it to a tiny positive `1e-12` to avoid domain error.
+5. Calls `log_pdf_normal(mu, sigma2, x)` and returns the result.
 """
-function compute_loglik(Y::Real, Ypred::Real, Mpred::AbstractMatrix{T}) where {T<:Real}
+function compute_loglik(Y::Real, Ypred::Real, Mpred::AbstractArray{T}) where {T<:Real}
     @assert size(Mpred,1) == 1 && size(Mpred,2) == 1 "Expected Mpred to be 1x1 for univariate"
 
-    σ² = Mpred[1,1]
-    μ = Ypred
+    sigma2 = Mpred[1,1]
+    mu = Ypred
     x = Y
 
     # minimal clamp
-    eps_σ² = 1e-12
-    if σ² <= eps_σ²
-        σ² = eps_σ²
+    eps_sigma2 = 1e-12
+    if sigma2 <= eps_sigma2
+        sigma2 = eps_sigma2
     end
 
-    return log_pdf_normal(μ, σ², x)
+    return log_pdf_normal(mu, sigma2, x)
 end
 
 """
@@ -124,8 +124,8 @@ Compute the **log-probability density** of a multivariate normal (MVN) at time i
 
 # Overview
 This function interprets:
-- The **predicted mean** μ as `Y_pred[:, t]` (i.e. column `t` of `Y_pred`).
-- The **predicted covariance** Σ as `Σ_pred[:, :, t]` (the `t`-th slice in a 3D array).
+- The **predicted mean** mu as `Y_pred[:, t]` (i.e. column `t` of `Y_pred`).
+- The **predicted covariance** Sigma as `Sigma_pred[:, :, t]` (the `t`-th slice in a 3D array).
 - The **actual observation** x as `Y[:, t]` (column `t` of `Y`).
 
 It then returns the log-density, ln p(x | μ, Σ) for that MVN.
@@ -134,11 +134,11 @@ It then returns the log-density, ln p(x | μ, Σ) for that MVN.
 
 - `Y_pred::AbstractMatrix{T}`:
   A matrix of size `(k, T_max)`, where row dimension `k` is the data dimension, 
-  and column dimension is the number of time steps. We take `Y_pred[:, t]` as μ.
+  and column dimension is the number of time steps. We take `Y_pred[:, t]` as mu.
 
-- `Σ_pred::AbstractArray{<:Real}`:
+- `Sigma_pred::AbstractArray{<:Real}`:
   A 3D array of size `(k, k, T_max)` storing the covariance for each time step. 
-  We take `Σ_pred[:, :, t]` as the `k×k` covariance at time `t`.
+  We take `Sigma_pred[:, :, t]` as the `k×k` covariance at time `t`.
 
 - `Y::AbstractMatrix{T}`:
   A matrix of actual observations, also `(k, T_max)`, so `Y[:, t]` is the 
@@ -149,18 +149,18 @@ It then returns the log-density, ln p(x | μ, Σ) for that MVN.
 
 # Returns
 A real scalar `::Real` representing:
-   ln N(x; μ, Σ, t).
+   ln N(x; mu, Sigma, t).
 
 # Method
 
-1. **Views** of μ, Σ, and x are created (`@view`) to avoid copying data.
-2. **Cholesky factorization** of Σ is computed via `cholesky(Symmetric(Σ))`. 
+1. **Views** of mu, Sigma, and x are created (`@view`) to avoid copying data.
+2. **Cholesky factorization** of Sigma is computed via `cholesky(Symmetric(Sigma))`. 
    - This yields an upper-triangular factor `C`.
-3. We form the difference `diff = x - μ`.
-4. We ise `solve` to efficiently compute, Σ⁻¹(x - μ), without explicit inversion.
-5. The log-determinant ln| Σ | is `2 * sum(log, diag(C.U))`.
+3. We form the difference `diff = x - mu`.
+4. We ise `solve` to efficiently compute, Sigma⁻¹(x - mu), without explicit inversion.
+5. The log-determinant ln| Sigma | is `2 * sum(log, diag(C.U))`.
 6. We add up the standard MVN log-pdf terms:
-     -frac{1}{2} (ln|Σ| + (x-μ)'Σ⁻¹(x-μ)) + constant terms.
+     -frac{1}{2} (ln|Sigma| + (x-mu)'Sigma⁻¹(x-mu)) + constant terms.
    Here the constant includes -0.5 * k * (ln 2π + 1) which is a variation of `-0.5 * (k*ln(2π) + k + ...)`.
 7. Returns the final log-pdf as a `Real`.
 
@@ -172,33 +172,33 @@ A real scalar `::Real` representing:
   will error. In a robust filter, you might ensure PSD by correction steps.
 
 """
-function logpdf_mvn(Y_pred::AbstractMatrix{T}, Σ_pred::AbstractArray{<:Real},
-                    Y::AbstractMatrix{T}, t::Int) where T <: Real
+function logpdf_mvn(Y_pred::AbstractArray{T}, Sigma_pred::AbstractArray{<:Real},
+                    Y::AbstractArray{T}, t::Int) where T <: Real
 
-    # 1) Take views for μ, Σ, x
-    μ = @view Y_pred[:, t]
-    Σ = @view Σ_pred[:, :, t]
+    # 1) Take views for mu, Sigma, x
+    mu = @view Y_pred[:, t]
+    Sigma = @view Sigma_pred[:, :, t]
     x = @view Y[:, t]
     
-    k = length(μ)
+    k = length(mu)
 
     # 2) Cholesky factorization
-    C = cholesky(Symmetric(Σ))
+    C = cholesky(Symmetric(Sigma))
 
     # 3) Form difference
-    diff = x .- μ
+    diff = x .- mu
 
     # 4) Solve for Σ^-1 diff via factor
     solved = C \ diff
 
     # 5) log(det(Σ)) from the factor
-    log_det_Σ = 2 * sum(log, diag(C.U))
+    log_det_Sigma = 2 * sum(log, diag(C.U))
 
     # 6) Constant term for MVN
-    const_term = -0.5 * k * (log(2π) + 1)  # i.e. ~ -0.5 * k * log(2π e)
+    const_term = -0.5 * k * log(2π)
 
     # 7) Compute the final log-pdf
-    logpdf = const_term - 0.5 * (log_det_Σ + dot(diff, solved))
+    logpdf = const_term - 0.5 * (log_det_Sigma + dot(diff, solved))
 
     return logpdf
 end
@@ -265,8 +265,8 @@ If you do not need the entire log-likelihood vector, call this function
 for each time step. Otherwise, for a typical filter, the in-place version
 `compute_loglik!` is often used inside a loop to fill a preallocated vector.
 """
-function compute_loglik(data::AbstractMatrix{T}, 
-                        mean::AbstractMatrix{T}, 
+function compute_loglik(data::AbstractArray{T}, 
+                        mean::AbstractArray{T}, 
                         covs::AbstractArray{<:Real}, 
                         t::Int) where {T <: Real}
     @assert t <= size(data,2) && t <= size(mean,2) && t <= size(covs,3) "Time index t out of range"

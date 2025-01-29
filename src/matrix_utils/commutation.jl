@@ -12,11 +12,11 @@ This file provides functions that generate:
    - `get_e(k, M)` produces a length‐M vector with a `1` in position `k` and `0`s elsewhere.  
    - `compute_e(M)` returns a collection of M such unit vectors, often used for block partitioning or matrix construction.
 
-2. **Commutation matrices** (`compute_Λ`)  
+2. **Commutation matrices** (`compute_Lambda`)  
    - The commutation matrix Λₙ is an `n²×n²` matrix that rearranges or 'commutes' the vectorized elements of an `n×n` matrix.  
    - We provide two versions:  
-     - `compute_Λ(N)` constructs Λₙ from scratch via Kronecker products of the unit vectors.  
-     - `compute_Λ(e, N)` uses a precomputed vector of unit vectors for efficiency.  
+     - `compute_Lambda(N)` constructs Λₙ from scratch via Kronecker products of the unit vectors.  
+     - `compute_Lambda(e, N)` uses a precomputed vector of unit vectors for efficiency.  
 
 # Purpose in the QKF
 In the Quadratic Kalman Filter, these utilities help handle vectorized 
@@ -33,11 +33,11 @@ v = get_e(3, 5)
 all_e = compute_e(5)
 
 # Build commutation matrix Λ₄ of size 16×16
-Λ = compute_Λ(4)
+Lambda = compute_Lambda(4)
 
 # Build commutation matrix Λ₄ using precomputed unit vectors
 e = compute_e(4)
-Λ2 = compute_Λ(e, 4)
+Lambda2 = compute_Lambda(e, 4)
 ```
 """
 
@@ -116,7 +116,7 @@ function compute_Λ(N::Int, ::Type{T}=Float64) where T <: Real
 end
 
 """
-    compute_Λ(e::AbstractVector{AbstractVector{T}}, N::Int) where T <: Real
+    compute_Lambda(e::AbstractVector{AbstractVector{T}}, N::Int) where T <: Real
 
 Compute the commutation matrix Λₙ of size N² × N² using precomputed unit vectors.
 
@@ -134,9 +134,9 @@ is eᵢeⱼ' (outer product of unit vectors). This version uses precomputed unit
 The matrix is constructed by explicitly filling each N × N block using the outer products of the
 appropriate unit vectors.
 """
-function compute_Λ(e::AbstractVector{AbstractVector{T}}, N::Int) where T <: Real
+function compute_Lambda(e::AbstractVector{AbstractVector{T}}, N::Int) where T <: Real
     # Initialize N² × N² matrix of zeros
-    Λ = zeros(T, N^2, N^2)
+    Lambda = zeros(T, N^2, N^2)
     
     # Fill each N × N block
     for i in 1:N
@@ -148,11 +148,11 @@ function compute_Λ(e::AbstractVector{AbstractVector{T}}, N::Int) where T <: Rea
             j1 = j * N          # End column of block (i,j)
             
             # Set block (i,j) to outer product eⱼeᵢ'
-            Λ[i0:i1, j0:j1] .= e[j] * e[i]'
+            Lambda[i0:i1, j0:j1] .= e[j] * e[i]'
         end
     end
     
-    return Λ
+    return Lambda
 end
 
-export compute_Λ, compute_e
+# export compute_Lambda, compute_e

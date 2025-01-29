@@ -1,3 +1,6 @@
+using Test
+import QuadraticKalman as QK
+using LinearAlgebra, Random
 @testset "QKModel Tests" begin
 
     # Test StateParams

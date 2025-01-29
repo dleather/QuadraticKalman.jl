@@ -1,3 +1,6 @@
+using Test
+import QuadraticKalman as QK
+using LinearAlgebra, Random
 @testset "QKData Tests" begin
     @testset "Constructor & Validation" begin
         # Valid 2D

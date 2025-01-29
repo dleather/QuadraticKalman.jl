@@ -1,4 +1,7 @@
 # test_augmented_moments_and_likelihood.jl
+using Test
+import QuadraticKalman as QK
+using LinearAlgebra, Random
 @testset "Augmented Moments & Likelihood Tests" begin
 
     @testset "compute_mu_aug tests" begin

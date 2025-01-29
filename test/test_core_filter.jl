@@ -1,3 +1,6 @@
+using Test
+import QuadraticKalman as QK
+using LinearAlgebra, Random
 @testset "Quadratic Kalman Filter Tests" begin
     
     @testset "Full Model Construction" begin

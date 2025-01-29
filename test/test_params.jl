@@ -2,13 +2,12 @@ using Test
 import QuadraticKalman as QK
 using LinearAlgebra, Random
 @testset "QKModel Tests" begin
+    Random.seed!(1234)
 
     # Test StateParams
     @testset "StateParams Tests" begin
 
         # Set seed for reproducibility
-        Random.seed!(1234)
-
         # Test StateParams
         N = 2
         mu = [1.0, 2.0]

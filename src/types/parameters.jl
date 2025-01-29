@@ -19,7 +19,7 @@ function StateParams(N::Int, mu::AbstractVector{T}, Phi::Union{AbstractMatrix{T}
     end
 
     if check_stability
-        @assert spectral_radius(Phi) < 1 "Phi must be stable (spectral radius < 1)"
+        @assert spectral_radius(Phi) < 1 - 1e-6 "Phi must be stable (spectral radius < 1)"
     end
 
     # Handle UniformScaling without breaking AD

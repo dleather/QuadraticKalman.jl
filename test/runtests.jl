@@ -1,7 +1,8 @@
 using Test
-using QuadraticKalman
+import QuadraticKalman as QK
+using LinearAlgebra, Random
 
-@testset "QuadraticKalman" begin
+@testset "QuadraticKalman.jl" begin
     include("test_data.jl")
     include("test_params.jl")
     include("test_matrix_utils.jl")

@@ -2,6 +2,9 @@ using Test
 import QuadraticKalman as QK
 using LinearAlgebra, Random
 @testset "QKF Smoother Tests" begin
+    # Set seed for reproducibility
+    Random.seed!(1234)
+
     # Helper function to create test data
     function create_test_data(P::Int, T_bar::Int)
         # Create sample data with known structure

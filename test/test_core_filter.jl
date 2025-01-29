@@ -2,6 +2,9 @@ using Test
 import QuadraticKalman as QK
 using LinearAlgebra, Random
 @testset "Quadratic Kalman Filter Tests" begin
+
+    # Set seed for reproducibility
+    Random.seed!(1234)
     
     @testset "Full Model Construction" begin
         N, M = 2, 1

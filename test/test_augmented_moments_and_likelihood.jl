@@ -4,6 +4,9 @@ import QuadraticKalman as QK
 using LinearAlgebra, Random
 @testset "Augmented Moments & Likelihood Tests" begin
 
+    # Set seed for reproducibility
+    Random.seed!(1234)
+
     @testset "compute_mu_aug tests" begin
         @testset "Scalar case" begin
             # If μ is scalar and Σ is also a scalar, compute_μ̃(μ, Σ) 

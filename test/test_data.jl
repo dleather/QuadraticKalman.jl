@@ -2,6 +2,10 @@ using Test
 import QuadraticKalman as QK
 using LinearAlgebra, Random
 @testset "QKData Tests" begin
+
+    # Set seed for reproducibility
+    Random.seed!(1234)
+
     @testset "Constructor & Validation" begin
         # Valid 2D
         Y = rand(3, 5) # M=3, T̄=4

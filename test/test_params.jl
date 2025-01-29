@@ -5,6 +5,11 @@ using LinearAlgebra, Random
 
     # Test StateParams
     @testset "StateParams Tests" begin
+
+        # Set seed for reproducibility
+        Random.seed!(1234)
+
+        # Test StateParams
         N = 2
         mu = [1.0, 2.0]
         Phi = [0.9 0.05; 0.0 0.8]

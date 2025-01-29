@@ -1,8 +1,3 @@
-using Test
-using LinearAlgebra
-using Random
-import QuadraticKalman as QK
-
 @testset "QKF Smoother Tests" begin
     # Helper function to create test data
     function create_test_data(P::Int, T_bar::Int)

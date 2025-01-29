@@ -1,9 +1,3 @@
-using Revise
-using Test
-using LinearAlgebra
-using Random
-import QuadraticKalman as QK
-
 @testset "Quadratic Kalman Filter Tests" begin
     
     @testset "Full Model Construction" begin

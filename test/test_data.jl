@@ -1,6 +1,3 @@
-using Test
-using QuadraticKalman
-
 @testset "QKData Tests" begin
     @testset "Constructor & Validation" begin
         # Valid 2D

@@ -1,5 +1,3 @@
-using LinearAlgebra, Random, Test
-import QuadraticKalman as QK
 @testset "Matrix Utils Tests" begin
     @testset "selection_matrix" begin
         S = QK.selection_matrix(3)

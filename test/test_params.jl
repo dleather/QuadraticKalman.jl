@@ -150,7 +150,7 @@ using LinearAlgebra, Random
         
         @test model.state.N == N
         @test model.meas.M == M
-        @test length(model.aug.mu_aug) == N + N^2
+        @test length(model.aug_state.mu_aug) == N + N^2
         @test length(model.moments.state_mean) == N
         @test size(model.moments.state_cov) == (N, N)
 

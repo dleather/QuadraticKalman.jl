@@ -8,8 +8,8 @@ using Statistics
 
 @testset "Compare to R results" begin
     # Load R results|
-    r_filter = load("test/r_results/qkf_results.rds")
-    r_smoother = load("test/r_results/qks_results.rds")
+    r_filter = load("r_results/qkf_results.rds")
+    r_smoother = load("r_results/qks_results.rds")
 
     # Load test data and parameters
     Y = CSV.read("test/simulated_data/simulated_measurements.csv", DataFrame) |> Matrix

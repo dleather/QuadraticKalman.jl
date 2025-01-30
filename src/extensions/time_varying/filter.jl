@@ -1,5 +1,6 @@
-function predict_Mₜₜ₋₁(Pₜₜ₋₁::AbstractMatrix{T}, Zₜₜ₋₁::AbstractVector{T},
+@doc false function predict_Mₜₜ₋₁(Pₜₜ₋₁::AbstractMatrix{T}, Zₜₜ₋₁::AbstractVector{T},
     params::QKParams{T,T2}, t::Int) where {T <: Real, T2 <: Real}
+
 
     @unpack M, B̃, M, P, wc, wu, wv, wuu, wuv, wvv = params
     z = Zₜₜ₋₁
@@ -23,9 +24,10 @@ function predict_Mₜₜ₋₁(Pₜₜ₋₁::AbstractMatrix{T}, Zₜₜ₋₁::
     return Mₜₜ₋₁
 end
 
-function predict_Mₜₜ₋₁!(Mₜₜ₋₁::AbstractArray{Real, 3}, Pₜₜ₋₁::AbstractArray{Real, 3},
+@doc false function predict_Mₜₜ₋₁!(Mₜₜ₋₁::AbstractArray{Real, 3}, Pₜₜ₋₁::AbstractArray{Real, 3},
     Zₜₜ₋₁::AbstractMatrix{T}, tmpB::AbstractMatrix{T}, params::QKParams{T,T2},
     t::Int) where {T <: Real, T2 <: Real}
+
             
 
     @unpack B̃, V, M, P, wc, wu, wv, wuu, wuv, wvv = params
@@ -120,8 +122,9 @@ from the state z = Zₜₜ₋₁[:, t].
    make_positive_definite. If your AD can handle in-place modifications, or you define a
    custom adjoint, it should be fine. Otherwise, consider a purely functional approach.
 """
-function update_Pₜₜ!( Pₜₜ::AbstractArray{Real,3}, Kₜ::AbstractArray{Real,3},
+@doc false function update_Pₜₜ!( Pₜₜ::AbstractArray{Real,3}, Kₜ::AbstractArray{Real,3},
     Mₜₜ₋₁::AbstractArray{Real,3}, Pₜₜ₋₁::AbstractArray{Real,3},
+
     Zₜₜ₋₁::AbstractArray{Real,2}, tmpKM::AbstractMatrix{Real},
     tmpKMK::AbstractMatrix{Real}, params::QKParams{T,T2}, t::Int ) where {T<:Real, T2<:Real}
     @unpack B̃, wc, wu, wv, wuu, wvv, wuv = params
@@ -169,8 +172,9 @@ and a scalar "volatility" derived from `Zₜₜ₋₁`.
    you want a direct forward pass without in-place modifications.
 
 """
-function update_Pₜₜ( Kₜ::AbstractMatrix{T5}, Mₜₜ₋₁::AbstractMatrix{T6},
+@doc false function update_Pₜₜ( Kₜ::AbstractMatrix{T5}, Mₜₜ₋₁::AbstractMatrix{T6},
     Pₜₜ₋₁::AbstractMatrix{T3}, Zₜₜ₋₁::AbstractVector{T4}, params::QKParams{T,T2},
+
     t::Int ) where {T<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
     @unpack B̃, wc, wu, wv, wuu, wvv, wuv = params
 

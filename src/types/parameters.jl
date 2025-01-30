@@ -123,7 +123,21 @@ function Moments(mu::AbstractVector{T}, Phi::AbstractMatrix{T}, Sigma::AbstractM
     return Moments{T}(state_mean, state_cov, aug_mean, aug_cov)
 end
 
-# Main structure
+"""
+    QKModel{T<:Real, T2<:Real}
+
+Main structure containing all parameters and moments needed for the quadratic Kalman filter.
+
+# Fields
+- `state::StateParams{T}`: Parameters for the state equation
+- `meas::MeasParams{T}`: Parameters for the measurement equation  
+- `aug_state::AugStateParams{T,T2}`: Parameters for the augmented state space
+- `moments::Moments{T}`: Unconditional moments of the state and augmented state
+
+# Type Parameters
+- `T`: The main numeric type used for most parameters (e.g. Float64)
+- `T2`: A possibly different numeric type used for Lambda in AugStateParams
+"""
 @with_kw struct QKModel{T<:Real, T2<:Real}
     state::StateParams{T}
     meas::MeasParams{T}

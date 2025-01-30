@@ -1338,4 +1338,4 @@ function qkf_filter!(data::QKData{T, 2}, model::QKModel{T,T2}) where {T <: Real,
 
 end
 
-export qkf_filter, qkf_filter!
+#export qkf_filter, qkf_filter!

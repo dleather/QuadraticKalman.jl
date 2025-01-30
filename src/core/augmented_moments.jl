@@ -302,6 +302,7 @@ For a stationary process (|Phi| < 1), the unconditional mean is mu/(1-Phi).
 """
 function compute_state_mean(mu::Real, Phi::Real) 
 
+
     return mu / (1.0 - Phi) 
 
 end

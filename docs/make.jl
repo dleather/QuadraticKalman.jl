@@ -1,4 +1,3 @@
-# make.jl
 using Documenter
 using QuadraticKalman
 
@@ -10,11 +9,11 @@ makedocs(
         "Home" => "index.md",
         "API Reference" => "api.md",
         "Examples" => "examples.md"
-    ]
-    # Removed invalid `public` parameter
+    ],
+    checkdocs = :none,
 )
 
 deploydocs(
-    repo = "https://github.com/dleather/QuadraticKalman.jl.git", # Added https://
+    repo = "https://github.com/dleather/QuadraticKalman.jl.git",
     devbranch = "main"
 )

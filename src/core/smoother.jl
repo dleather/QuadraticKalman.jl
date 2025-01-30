@@ -132,7 +132,7 @@ Z_smooth, P_smooth = qkf_smoother(Z, P, Z_pred, P_pred, T̄, Hn, Gn, H̃, Φ̃, 
 """ 
 function qkf_smoother(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
     Z_pred::AbstractMatrix{T}, P_pred::AbstractArray{T,3}, T_bar::Int,
-    G_aug::AbstractMatrix{T}, H_aug::AbstractMatrix{T},
+    H_aug::AbstractMatrix{T}, G_aug::AbstractMatrix{T}, 
     Phi_aug::AbstractMatrix{T}, dof::Int) where {T<:Real}
 
 
@@ -142,7 +142,7 @@ function qkf_smoother(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
     P_smooth .= P  # replicate the filtered covariances
 
     # Just call the in-place version on the copies:
-    qkf_smoother!(Z_smooth, P_smooth, Z_pred, P_pred, T_bar, G_aug, H_aug, Phi_aug, dof)
+    qkf_smoother!(Z_smooth, P_smooth, Z_pred, P_pred, T_bar, G_aug, H_aug, Phi_aug)
 
 
     return (copy(Z_smooth), copy(P_smooth))

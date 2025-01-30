@@ -673,7 +673,7 @@ function update_Z_tt(
     Y::AbstractVecOrMat{T},
     Y_ttm1::AbstractMatrix{T},
     Z_ttm1::AbstractMatrix{T},
-    t::Int) :: Vector{T} where {T<:Real}
+    t::Int) where {T<:Real}
 
     # Handle both vector and matrix Y inputs
     current_Y = Y isa AbstractVector ? Y[t+1] : Y[:, t+1]

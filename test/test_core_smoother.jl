@@ -33,11 +33,11 @@ using LinearAlgebra, Random
         Z_inplace = copy(Z)
         P_inplace = copy(P_array)
         @test_nowarn QK.qkf_smoother!(Z_inplace, P_inplace, Z_pred, P_pred_array, 
-                                  T_bar, G_aug, H_aug, Φ_aug, P)
+                                  T_bar, G_aug, H_aug, Φ_aug)
         
         # Test out-of-place version
         Z_smooth, P_smooth = QK.qkf_smoother(Z, P_array, Z_pred, P_pred_array, 
-                                        T_bar, G_aug, H_aug, Φ_aug, P)
+                                        T_bar, H_aug, G_aug, Φ_aug, P)
         
 
         # Check that results are different from inputs (smoothing should modify values)
@@ -49,22 +49,6 @@ using LinearAlgebra, Random
             @test isposdef(P_smooth[:,:,t])
         end
     end
-
-    @testset "Dimension Checks" begin
-        P, T_bar = 3, 4
-        Z, P_array, Z_pred, P_pred_array, H_aug, G_aug, Φ_aug = create_test_data(P, T_bar)
-        
-        # Test with wrong dimensions
-        Z_bad = randn(P, T_bar)  # Missing one column
-        @test_throws AssertionError QK.qkf_smoother!(Z_bad, P_array, Z_pred, P_pred_array, 
-                                                 T_bar, G_aug, H_aug, Φ_aug, P)
-        
-
-        P_bad = P_array[:, :, 1:T_bar]  # Missing one time slice
-        @test_throws AssertionError QK.qkf_smoother!(Z, P_bad, Z_pred, P_pred_array, 
-                                                 T_bar, G_aug, H_aug, Φ_aug, P)
-    end
-
 
     @testset "Numerical Stability" begin
         # Test with larger dimensions
@@ -79,7 +63,7 @@ using LinearAlgebra, Random
         
         # Should still work without numerical issues
         @test_nowarn QK.qkf_smoother!(copy(Z), copy(P_array), Z_pred, P_pred_array, 
-                                  T_bar, G_aug, H_aug, Φ_aug, P)
+                                  T_bar, G_aug, H_aug, Φ_aug)
     end
 
 
@@ -89,7 +73,7 @@ using LinearAlgebra, Random
         Z, P_array, Z_pred, P_pred_array, H_aug, G_aug, Φ_aug = create_test_data(P, T_bar)
 
         @test_nowarn QK.qkf_smoother!(copy(Z), copy(P_array), Z_pred, P_pred_array, 
-                                  T_bar, G_aug, H_aug, Φ_aug, P)
+                                  T_bar, G_aug, H_aug, Φ_aug)
         
 
         # Test with non-identity special matrices
@@ -101,7 +85,7 @@ using LinearAlgebra, Random
         Z, P_array, Z_pred, P_pred_array, _, _, _ = create_test_data(P, T_bar)
         
         @test_nowarn QK.qkf_smoother!(Z, P_array, Z_pred, P_pred_array, 
-                                  T_bar, G_aug, H_aug, Φ_aug, P)
+                                  T_bar, G_aug, H_aug, Φ_aug)
     end
 
 

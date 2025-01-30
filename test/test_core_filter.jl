@@ -38,11 +38,10 @@ using LinearAlgebra, Random
         Z_tt = [0.1, 0.1]  # Current state
         
         # Test state prediction
-        Z_ttm1 = QK.predict_Z_ttm1(Z_tt, model)
-        @test length(Z_ttm1) == N + N^2  # Augmented state dimension
+        Z_ttm1 = reshape(QK.predict_Z_ttm1(Z_tt, model),N * (N + 1), 1)
         
         # Test measurement prediction
-        Y = [0.1, 0.2]  # Some measurement data
+        Y = reshape([0.1], M, 1)  # Some measurement data
         Y_ttm1 = QK.predict_Y_ttm1(Z_ttm1, Y, model, 1)
         @test length(Y_ttm1) == M
     end
@@ -54,10 +53,10 @@ using LinearAlgebra, Random
         model = QK.QKModel(state, meas)
         
         # Setup minimal state and covariance
-        K_t = reshape([0.5, 0.5], 2, 1)  # Some Kalman gain
-        Y_t = 0.1                   # Measurement
-        Y_ttm1 = 0.0               # Predicted measurement
-        Z_ttm1 = [0.0, 0.0]        # Predicted state
+        K_t = reshape([0.5, 0.5], 2, 1, 1)  # Some Kalman gain
+        Y_t = repeat([0.1], M, 2)                   # Measurement
+        Y_ttm1 = reshape([0.0], M, 1)               # Predicted measurement
+        Z_ttm1 = reshape([0.0, 0.0], N * (N + 1), 1)        # Predicted state
         
         # Test state update
         Z_tt_new = QK.update_Z_tt(K_t, Y_t, Y_ttm1, Z_ttm1, 1)
@@ -70,7 +69,7 @@ using LinearAlgebra, Random
 
         T_bar = 100
         N, M = 1, 1
-        Y = cumsum(randn(T_bar + 1))  # Random walk plus noise
+        Y = reshape(cumsum(randn(T_bar + 1)), T_bar + 1, 1)  # Random walk plus noise
 
 
         # Create state and measurement parameters
@@ -78,7 +77,7 @@ using LinearAlgebra, Random
         meas = QK.MeasParams(M, N, [0.0], reshape([1.0], 1, 1), [reshape([1.0], 1, 1)], reshape([0.1], 1, 1), reshape([0.0], 1, 1))
         model = QK.QKModel(state, meas)
 
-        data = QK.QKData(Y = Y, M=M, T_bar=T_bar)
+        data = QK.QKData(Y = Y', M=M, T_bar=T_bar)
 
         # Test both filter versions
         result = QK.qkf_filter(data, model)

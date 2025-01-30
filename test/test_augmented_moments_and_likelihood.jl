@@ -116,8 +116,8 @@ using LinearAlgebra, Random
         @testset "Multivariate case" begin
             # Suppose we have 2D data. Y= [0.0; 0.0], Ypred= [0.0; 0.0], cov= I(2).
             # log-likelihood => -0.5*(2*log(2π) + 0.0) = -log(2π)
-            Y2 = [0.0, 0.0]
-            Y2_pred = [0.0, 0.0]
+            Y2 = [0.0 0.0; 0.0 0.0]
+            Y2_pred = [0.0 0.0; 0.0 0.0]
             M2pred = Matrix(I, 2, 2)  # 2×2 identity
             # Using the time-indexed version: compute_loglik(data, mean, cov, t)
             # or the simpler form compute_loglik(Y2, Y2_pred, M2pred).

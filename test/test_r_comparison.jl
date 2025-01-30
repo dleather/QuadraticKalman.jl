@@ -7,7 +7,7 @@ using JSON
 using Statistics
 
 @testset "Compare to R results" begin
-    # Load R results
+    # Load R results|
     r_filter = load("test/r_results/qkf_results.rds")
     r_smoother = load("test/r_results/qks_results.rds")
 

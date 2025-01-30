@@ -9,13 +9,26 @@ makedocs(
         "Home" => "index.md",
         "API Reference" => "api.md",
         "Examples" => "examples.md"
+    ],
+    # Add this to only document specific exports
+    public = [
+        # Types
+        :QKData,
+        :QKModel,
+        :QKFOutput,
+        :FilterOutput,
+        :SmootherOutput,
+        # Functions
+        :qkf_filter,
+        :qkf_filter!,
+        :qkf_smoother,
+        :qkf_smoother!,
+        :qkf,
+        :get_measurement
     ]
 )
 
-# Documenter can also automatically deploy documentation to gh-pages.
-# See "Hosting Documentation" and deploydocs() in the Documenter manual
-# for more information.
 deploydocs(
     repo = "github.com/dleather/QuadraticKalman.jl.git",
     devbranch = "main"
-) 
+)

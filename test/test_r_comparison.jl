@@ -12,11 +12,11 @@ using Statistics
     r_smoother = load("r_results/qks_results.rds")
 
     # Load test data and parameters
-    Y = CSV.read("test/simulated_data/simulated_measurements.csv", DataFrame) |> Matrix
-    X = CSV.read("test/simulated_data/simulated_states.csv", DataFrame) |> Matrix
+    Y = CSV.read("simulated_data/simulated_measurements.csv", DataFrame) |> Matrix
+    X = CSV.read("simulated_data/simulated_states.csv", DataFrame) |> Matrix
     
     # Load params in JSON
-    params = JSON.parsefile("test/simulated_data/simulated_params.json")
+    params = JSON.parsefile("simulated_data/simulated_params.json")
     
     # Unload params
     n = 2

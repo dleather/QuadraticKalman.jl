@@ -212,6 +212,11 @@ function qkf(model::QKModel{T,T2}, data::QKData{T1,N}) where {T1<:Real, T<:Real,
 end
 
 # Add method with reversed argument order for backwards compatibility
+"""
+    qkf(data::QKData{T1,N}, model::QKModel{T,T2}) where {T1<:Real, T<:Real, T2<:Real, N}
+
+Reversed argument order for backwards compatibility.
+"""
 function qkf(data::QKData{T1,N}, model::QKModel{T,T2}) where {T1<:Real, T<:Real, T2<:Real, N}
     return qkf(model, data)
 end

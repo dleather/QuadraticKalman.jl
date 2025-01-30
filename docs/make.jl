@@ -1,3 +1,4 @@
+# make.jl
 using Documenter
 using QuadraticKalman
 
@@ -9,14 +10,11 @@ makedocs(
         "Home" => "index.md",
         "API Reference" => "api.md",
         "Examples" => "examples.md"
-    ],
-    # Fix the public parameter syntax
-    public = [:QKData, :QKModel, :QKFOutput, :FilterOutput, :SmootherOutput,
-              :qkf_filter, :qkf_filter!, :qkf_smoother, :qkf_smoother!, :qkf,
-              :get_measurement]
+    ]
+    # Removed invalid `public` parameter
 )
 
 deploydocs(
-    repo = "github.com/dleather/QuadraticKalman.jl.git",
+    repo = "https://github.com/dleather/QuadraticKalman.jl.git", # Added https://
     devbranch = "main"
 )

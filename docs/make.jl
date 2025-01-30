@@ -14,6 +14,8 @@ makedocs(
 )
 
 deploydocs(
-    repo = "https://github.com/dleather/QuadraticKalman.jl.git",
-    devbranch = "main"
+    doc   = doc,
+    repo  = "https://github.com/dleather/QuadraticKalman.jl.git",
+    devbranch = "main",
+    # Possibly: deploy_config = Documenter.GitHubActions()
 )

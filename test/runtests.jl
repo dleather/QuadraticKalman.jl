@@ -1,8 +1,13 @@
 using Test
 import QuadraticKalman as QK
 using LinearAlgebra, Random
-
+using CSV, DataFrames
+using RData, JSON
+using Aqua
 @testset "QuadraticKalman.jl" begin
+    @testset "Code quality (Aqua.jl)" begin
+        Aqua.test_all(QK)
+    end
     include("test_data.jl")
     include("test_params.jl")
     include("test_matrix_utils.jl")

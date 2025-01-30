@@ -1,5 +1,5 @@
 using Documenter
-using QuadraticKalman 
+using QuadraticKalman
 
 makedocs(
     sitename = "QuadraticKalman.jl",
@@ -10,21 +10,12 @@ makedocs(
         "API Reference" => "api.md",
         "Examples" => "examples.md"
     ],
-    # Add this to only document specific exports
+    # Fix the public parameter syntax
     public = [
         # Types
-        :QKData,
-        :QKModel,
-        :QKFOutput,
-        :FilterOutput,
-        :SmootherOutput,
+        :QKData, :QKModel, :QKFOutput, :FilterOutput, :SmootherOutput,
         # Functions
-        :qkf_filter,
-        :qkf_filter!,
-        :qkf_smoother,
-        :qkf_smoother!,
-        :qkf,
-        :get_measurement
+        :qkf_filter, :qkf_filter!, :qkf_smoother, :qkf_smoother!, :qkf, :get_measurement
     ]
 )
 

@@ -18,9 +18,18 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
 julia = "1.10"
+DifferentiableEigen = "=0.2.0"
+ForwardDiff = "0.10"
+LogExpFunctions = "0.3"
+Parameters = "0.12"
+Preferences = "1.4"
+ReverseDiff = "1.15"
+SpecialFunctions = "2.3"
+Zygote = "0.6"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
+

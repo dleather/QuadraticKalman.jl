@@ -38,4 +38,4 @@ jobs:
         with:
           files: lcov.info
           fail_ci_if_error: true
-          # Remove the token line for public repos
+          slug: dleather/QuadraticKalman.jl 

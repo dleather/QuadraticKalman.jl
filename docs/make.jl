@@ -1,7 +1,7 @@
 using Documenter
 using QuadraticKalman
 
-makedocs(
+doc = makedocs(
     sitename = "QuadraticKalman.jl",
     format = Documenter.HTML(),
     modules = [QuadraticKalman],
@@ -17,5 +17,5 @@ deploydocs(
     doc   = doc,
     repo  = "https://github.com/dleather/QuadraticKalman.jl.git",
     devbranch = "main",
-    # Possibly: deploy_config = Documenter.GitHubActions()
+    deploy_config = Documenter.GitHubActions()
 )

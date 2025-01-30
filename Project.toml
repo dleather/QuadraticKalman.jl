@@ -26,6 +26,10 @@ Preferences = "1.4"
 ReverseDiff = "1.15"
 SpecialFunctions = "2.3"
 Zygote = "0.6"
+Test = "1.10"
+LinearAlgebra = "1"
+Random = "1"
+SparseArrays = "1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

@@ -262,6 +262,7 @@ Compute the third auxiliary matrix L₃ for the scalar case.
 # Description
 Implements the third auxiliary matrix L₃ from Proposition 3.2 for the scalar case.
 This is a simplified version where the matrix operations reduce to scalar multiplication.
+
 """
 function compute_L3(Sigma::Real, Lambda::AbstractMatrix{T}) where T <: Real
     L3 = (1.0 + Lambda[1]) * (1.0 + Lambda[1]) * Lambda[1] * Sigma
@@ -399,8 +400,8 @@ function compute_cond_cov_state_aug(Z::AbstractVector{T1}, L1::AbstractMatrix{T2
     N = length(mu)
     mu_Phi_z = (mu + Phi_aug[1:N,:] * Z)
     Sigma_11 = Sigma
-    Sigma_12 = reshape(L1 * mu_Phi_z, (N, N^2))
-    Sigma_21 = reshape(L2 * mu_Phi_z, (N^2, N))
+    Sigma_12 = reshape(L1 * mu_Phi_z, (N^2, N))'
+    Sigma_21 = Sigma_12'
     Sigma_22 = reshape(L3 * (kron(mu, mu) + Phi_aug[N+1:end,:] * Z) +
                     kron(I(N^2), I + Lambda) * vec(kron(Sigma, Sigma)), (N^2, N^2))
 
@@ -548,10 +549,8 @@ function compute_B_aug(B::AbstractMatrix{T}, C::Vector{<:AbstractMatrix{T}}) whe
     end
     
     # Create the C part of B̃ using array comprehension
-    C_part = [C[i][j, k] for i in 1:M, j in 1:N, k in 1:N]
-    
-    # Reshape C_part to be M x N^2
-    C_part = reshape(C_part, M, N^2)
+    #C_part = [C[i][j, k] for i in 1:M, j in 1:N, k in 1:N]
+    C_part = reduce(vcat, [vec(C[i])' for i in 1:M])
     
     # Combine B and C_part
     B_aug = hcat(B, C_part)

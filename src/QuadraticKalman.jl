@@ -59,17 +59,10 @@ include("core/likelihood.jl")
 include("core/filter.jl")
 include("core/smoother.jl")
 
-# From types/
-export QKModel, QKData, FilterOutput, SmootherOutput, QKFOutput, get_measurement
-
-# From matrix_utils/
-export compute_Lambda, compute_e, selection_matrix, duplication_matrix, vech,
-       spectral_radius, make_positive_definite, make_symmetric
-
-# From core/
-export qkf_filter, qkf_filter!,
-       compute_loglik, compute_loglik!,
-       qkf_smoother, qkf_smoother!
+# Export public types and functions
+export QKData, QKModel, QKFOutput, FilterOutput, SmootherOutput     # Types
+export qkf_filter, qkf_filter!, qkf_smoother, qkf_smoother!, qkf    # Functions
+export get_measurement                                              # Convenience function
 
 
 end # module

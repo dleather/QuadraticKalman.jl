@@ -68,99 +68,48 @@ qkf_smoother!(Z, P, Z_pred, P_pred, T_bar, Hn, Gn, H_aug, Φ_aug, n)
 ```
 """
 function qkf_smoother!(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
-    Z_pred::AbstractMatrix{T}, P_pred::AbstractArray{T,3}, T_bar::Int,
-    G_aug::AbstractMatrix{T}, H_aug::AbstractMatrix{T}, Phi_aug::AbstractMatrix{T},
-    dof::Int) where {T <: Real}
+  Z_pred::AbstractMatrix{T}, P_pred::AbstractArray{T,3}, T_bar::Int,
+  Hn_aug::AbstractMatrix{T}, Gn_aug::AbstractMatrix{T},
+  Phi_aug::AbstractMatrix{T}) where {T<:Real}
 
-    @assert size(Z,2) == T_bar + 1 "Z should have T_bar+1 columns"
-    @assert size(P,3) == T_bar + 1 "P should have T_bar+1 slices"
-    @assert size(Z_pred,2) == T_bar "Z_pred should have T_bar columns"
-    @assert size(P_pred,3) == T_bar "P_pred should have T_bar slices"
-    
+  for t in (T_bar-1):-1:1
+      # 1) Compute reduced covariances
+      M_t = Hn_aug * P[:, :, t] * Hn_aug'
+      M_tp1 = Hn_aug * P_pred[:, :, t] * Hn_aug'
 
-    # Work backward from t=T_bar-1 down to t=1
-    for t in (T_bar-1):-1:1
-        # 1) Transform P^Z_{t|t} and P^Z_{t+1|t} with H̃
-        #    We want: M_t   = ( H̃ * P^Z_{t|t} * H̃' )
-        #             M_t+1 = ( H_aug * P^Z_{t+1|t} * H_aug' )
-        M_t   = H_aug * P[:,:,t]   * H_aug'
-        M_t1  = H_aug * P_pred[:,:,t] * H_aug'
-    
-        # 2) Also transform states
-        #    hZ_t   = (H_aug * Z[:, t])
-        #    hZ_t+1 = (H_aug * Z_pred[:, t]) for the predicted,
-        #             or use the smoothed Z_{t+1|T} if it is already updated
-        hZ_t   = H_aug * Z[:,t]
-        hZ_t1  = H_aug * Z[:,t+1]   # after smoothing pass (Z_{t+1|T})
-        hZ_t1p = H_aug * Z_pred[:,t]  # Z_{t+1|t} from forward filter
-    
-        # 3) Form the cross term: (tilde{H}_n * tilde{\Phi} * tilde{G}_n)'
-        #    We'll store it if needed or do direct multiplication inline.
-        #    Typically: cross = (H_aug * Φ_aug * G_aug)' 
-        cross = (H_aug * Phi_aug * G_aug)'
-    
+      # 2) Extract reduced states
+      hZ_t = Hn_aug * Z[:, t]
+      hZ_tp1 = Hn_aug * Z[:, t+1]  # Smoothed t+1 (already updated)
+      hZ_pred = Hn_aug * Z_pred[:, t]
 
-        # 4) Now compute F_t = M_t * cross * (M_t1)^-1
-        #    But we use a solve: F_t = M_t * cross * (M_t1 \ I)
-        #    i.e. F_t = M_t * cross * inv(M_t1), so we do:
-        #       S = M_t1 \ (M_t * cross)
-        #    or we do factorization of M_t1. We'll do `ldiv!` approach:
-        #    Let factor = lu(M_t1)  or cholesky if it's PSD. We'll assume PSD -> use cholesky:
-        factor_t1 = cholesky(Symmetric(M_t1))  # or: factor_t1 = cholesky(M_t1)
-        # We'll allocate a temp for multiplication M_t * cross
-        tmp = similar(M_t, size(M_t,1), size(cross,2))
-        mul!(tmp, M_t, cross)  # tmp = M_t * cross
-        # Now solve for F_t: F_t = tmp * (M_t1^-1) = factor_t1 \ tmp
-        F_t = factor_t1 \ tmp    # => size(F_t) = (size(M_t,1), size(cross,1))
-    
-        # 5) Update the smoothed hZ_t: 
-        #    hZ_{t|T} = hZ_{t|t} + F_t ( hZ_{t+1|T} - hZ_{t+1|t} )
-        @assert size(hZ_t1) == size(hZ_t1p) "Dimension mismatch in predicted vs smoothed for time t+1"
-        diff = hZ_t1 .- hZ_t1p
-        hZ_t_smooth = hZ_t .+ F_t * diff
-    
-        # 6) Update the smoothed M_t ( => (H̃ P^Z_{t|T} H̃') ), then revert
-        #    M_{t|T} = M_t + F_t [ (H̃ P^Z_{t+1|T} H̃') - M_t1 ] F_t'    #    We have P^Z_{t+1|T} = P[:,:,t+1] at this point (the smoothed version).
-        M_t1_smooth = H_aug * P[:,:,t+1] * H_aug'
-        dM = M_t1_smooth .- M_t1
+      # 3) Compute cross term and F_t (correct order)
+      cross = (Hn_aug * Phi_aug * Gn_aug)'
+      tmp = M_t * cross
+      factor_tp1 = cholesky(Symmetric(M_tp1))
+      F_t = (factor_tp1 \ tmp')'  # Equivalent to tmp * inv(M_tp1)
 
-        #   mid = F_t * dM
-        mid = similar(F_t, size(F_t,1), size(dM,2))
-        mul!(mid, F_t, dM)
-        #   new_M_t = M_t + mid * F_t'
-        #   We'll do this in-place for performance
-        new_M_t = copy(M_t)
-        mul!(new_M_t, mid, F_t', 1.0, 1.0)  # new_M_t = new_M_t + mid * F_t'
-    
-        # 7) Transform back: we want P^Z_{t|T} such that 
-        #    H̃ * P^Z_{t|T} * H̃' = new_M_t
-        #    => P^Z_{t|T} = (H̃') \ new_M_t / (H̃)   (conceptually)
-        #    but in practice we handle the shape carefully. 
-        #    If H_aug is invertible, we do a solve again:
-        factor_tilde = lu(H_aug)  # or cholesky if appropriate
-        # let Q = factor_tilde \ new_M_t
-        Q = similar(new_M_t)
+      # 4) Update smoothed state in reduced space
+      diff = hZ_tp1 .- hZ_pred
+      hZ_t_smooth = hZ_t .+ F_t * diff
 
-        ldiv!(Q, factor_tilde, new_M_t)  # Q = H̃^-1 * new_M_t
-        # Now P^Z_{t|T} = Q * (H̃^-1)' 
-        # We'll do another ldiv! with factor_tilde on Q^T if needed. 
-        # Or a direct approach: P^Z_{t|T} = Q * inv(H̃')
-        # We'll do factor_tilde' if it’s an LU or cholesky factor. 
-        # For simplicity:
-        P_tT = Q * inv(H_aug')   # This is an allocation; we can refine if needed
-    
+      # 5) Project delta back to full state and update Z
+      delta_hZ = hZ_t_smooth - hZ_t
+      mul!(view(Z, :, t), Hn_aug', delta_hZ, 1.0, 1.0)
 
-        # Overwrite the slices:
-        # Overwrite Z_{t|T} by transforming hZ_t_smooth back:
-        # we want Z_{t|T} = H̃^-1 * hZ_t_smooth
-        Z_tT = factor_tilde \ hZ_t_smooth
-        Z[:, t] .= Z_tT
-        P[:,:, t] .= P_tT
-    end
-    
-    return nothing
-    
+      # 6) Update covariance in reduced space
+      M_tp1_smooth = Hn_aug * P[:, :, t+1] * Hn_aug'
+      dM = M_tp1_smooth - M_tp1
+      mid = F_t * dM
+      new_M_t = M_t + mid * F_t'
+
+      # 7) Project delta covariance back to full space and update P
+      delta_M = new_M_t - M_t
+      mul!(view(P, :, :, t), Hn_aug', delta_M * Hn_aug, 1.0, 1.0)
+  end
+
+  return nothing
 end
+
 
 """
     qkf_smoother( Z, P, Z_pred, P_pred, T_bar, H_aug, G_aug, Φ_aug, dof ) -> (Z_smooth, P_smooth)
@@ -230,7 +179,8 @@ function qkf_smoother(filter_output::FilterOutput{T},
     model::QKModel{T,T2}) where {T<:Real, T2<:Real}
 
     @unpack Z_tt, P_tt, Z_ttm1, P_ttm1 = filter_output
-    @unpack H_aug, G_aug, Φ_aug = model.AugStateParams
+    @unpack H_aug, G_aug, Phi_aug = model.aug_state
+    @unpack N = model.state
     T_bar = size(Z_tt, 2) - 1
 
     # Make copies for the smoothed results
@@ -238,7 +188,7 @@ function qkf_smoother(filter_output::FilterOutput{T},
     P_smooth = copy(P_tt)
     
     # Call in-place version on copies
-    qkf_smoother!(Z_smooth, P_smooth, Z_ttm1, P_ttm1, T_bar, G_aug, H_aug, Φ_aug, N)
+    qkf_smoother!(Z_smooth, P_smooth, Z_ttm1, P_ttm1, T_bar, H_aug, G_aug, Phi_aug)
     
     # Return fresh copies for AD
     return SmootherOutput(copy(Z_smooth), copy(P_smooth))
@@ -250,7 +200,7 @@ end
 
 Run both QKF filter and smoother, returning combined results.
 """
-function qkf(data::QKData{T1,N}, model::QKModel{T,T2}) where {T1, T, T2, N}
+function qkf(model::QKModel{T,T2}, data::QKData{T1,N}) where {T1<:Real, T<:Real, T2<:Real, N}
     # Run filter
     filter_output = qkf_filter(data, model)
     
@@ -259,6 +209,11 @@ function qkf(data::QKData{T1,N}, model::QKModel{T,T2}) where {T1, T, T2, N}
     
     # Return combined results
     return QKFOutput{T}(filter_output, smoother_output)
+end
+
+# Add method with reversed argument order for backwards compatibility
+function qkf(data::QKData{T1,N}, model::QKModel{T,T2}) where {T1<:Real, T<:Real, T2<:Real, N}
+    return qkf(model, data)
 end
 
 #export qkf_smoother!, qkf_smoother, qkf

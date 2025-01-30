@@ -178,7 +178,7 @@ function logpdf_mvn(Y_pred::AbstractArray{T}, Sigma_pred::AbstractArray{<:Real},
     # 1) Take views for mu, Sigma, x
     mu = @view Y_pred[:, t]
     Sigma = @view Sigma_pred[:, :, t]
-    x = @view Y[:, t]
+    x = @view Y[:, t + 1]
     
     k = length(mu)
 

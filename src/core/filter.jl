@@ -97,10 +97,9 @@ The result is written **in place** into `Z_ttm1[:, t]`.
 function predict_Z_ttm1!(Z_tt::AbstractMatrix{T}, Z_ttm1::AbstractMatrix{T},
     model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
 
-    @unpack aug_mean, Phi_aug = model.aug_state
-    Z_ttm1[:, t] = aug_mean .+ Phi_aug * Z_tt[:, t]
+    @unpack Phi_aug, mu_aug = model.aug_state
+    Z_ttm1[:, t] = mu_aug .+ Phi_aug * Z_tt[:, t]
 end
-
 
 """
     predict_Z_ttm1(Z_tt::AbstractVector{T}, model::QKModel{T,T2}) 
@@ -126,9 +125,8 @@ Useful in AD frameworks that avoid in-place updates.
 """
 function predict_Z_ttm1(Z_tt::AbstractVector{T}, model::QKModel{T,T2}) where {T <: Real, T2 <: Real}
 
-    @unpack Phi_aug = model.aug_state
-    @unpack aug_mean = model.moments
-    return aug_mean .+ Phi_aug * Z_tt
+    @unpack Phi_aug, mu_aug = model.aug_state
+    return mu_aug .+ Phi_aug * Z_tt
 end
 
 """
@@ -184,7 +182,6 @@ function predict_P_ttm1!(P_tt::AbstractArray{Real,3}, P_ttm1::AbstractArray{Real
     )
 end
 
-
 """
     predict_P_ttm1(P_tt::AbstractMatrix{T}, 
                    Z_tt::AbstractVecOrMat{<:Real}, 
@@ -221,10 +218,10 @@ for AD or simpler code flow.
 function predict_P_ttm1(P_tt::AbstractMatrix{T}, Z_tt::AbstractVecOrMat{<:Real},
     model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
 
-    Σ_ttm1 = compute_Sigma_ttm1(Z_tt, model)
+    Sigma_ttm1 = compute_Sigma_ttm1(Z_tt, model)
 
     @unpack Phi_aug = model.aug_state
-    P_tmp = Phi_aug * P_tt * Phi_aug' .+ Σ_ttm1
+    P_tmp = Phi_aug * P_tt * Phi_aug' .+ Sigma_ttm1
 
     if !isposdef(P_tmp)
         return make_positive_definite(P_tmp)
@@ -234,181 +231,104 @@ function predict_P_ttm1(P_tt::AbstractMatrix{T}, Z_tt::AbstractVecOrMat{<:Real},
 end
 
 """
-    predict_Y_ttm1!(Y_ttm1::AbstractMatrix{T}, 
-                   Z_ttm1::AbstractMatrix{T}, 
-                   Y::AbstractMatrix{T}, 
-                   model::QKModel{T,T2}, 
-                   t::Int)
+    predict_Y_ttm1!(Y_ttm1, Z_ttm1, Y, model, t)
 
-In-place update of the predicted measurement `Y_ttm1[:, t]` given:
-- A *matrix* of state estimates `Z_ttm1`,
-- A *matrix* of actual observations `Y`, and
-- Parameter struct `model`.
+In-place update of the **predicted measurement** at time `t` in the range `1..T̄`.
 
 # Arguments
-- `Y_ttm1::AbstractMatrix{T}`: (M×T̄) array where the predicted measurement 
-  at time `t` is stored in `Y_ttm1[:, t]`.
-- `Z_ttm1::AbstractMatrix{T}`: (P×T̄) array of the one-step-ahead predicted states.
-- `Y::AbstractMatrix{T}`: (M×T̄) array of actual observations.
-- `model::QKModel{T,T2}`: Contains:
-  - `A::Vector{T}`, `B̃::Matrix{T}`: The observation model terms.
-  - `α::Matrix{T}`: Additional AR-like component for measurement.
-- `t::Int`: Time index (1-based).
 
-# Details
-Computes `Y_ttm1[:, t] = A + B̃*Z_ttm1[:, t] + α * Y[:, t]`.
-This is stored in-place in `Y_ttm1`. Purely a linear operation, 
-so it is **AD-friendly**.
+- `Y_ttm1::AbstractMatrix{T}`:  
+  A matrix of size `(M, T̄)` where we store the predicted measurement 
+  at column `t`.  
+  - After the call, `Y_ttm1[:, t]` is overwritten with the new predicted values.
 
-"""
-function predict_Y_ttm1!(Y_ttm1::AbstractMatrix{T}, Z_ttm1::AbstractMatrix{T},
-    Y::AbstractMatrix{T}, model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
+- `Z_ttm1::AbstractMatrix{T}`:  
+  A `(P, T̄)` matrix of one-step-ahead predicted states. We read `Z_ttm1[:, t]`.
 
-    @unpack A, α = model.meas
-    @unpack B_aug = model.aug_state
-    Y_ttm1[:, t] = A .+ B_aug * Z_ttm1[:, t] .+ α * Y[:, t]
-end
+- `Y::AbstractMatrix{T}`:  
+  The **original** measurements of size `(M, T̄)`. If your data is univariate,
+  reshape a length-`T̄` vector into `(1, T̄)`.
 
+- `model::QKModel{T,T2}`:  
+  Contains fields:
+  - `A::Vector{T}` of length `M`
+  - `B_aug::Matrix{T}` of size `(M, P)`
+  - `alpha::Matrix{T}` of size `(M, M)` or `(M, 1)` for AR-like terms
+  and so on.
 
-"""
-    predict_Y_ttm1!(Y_ttm1::AbstractVector{T}, 
-                   Z_ttm1::AbstractMatrix{T}, 
-                   Y::AbstractVector{T1}, 
-                   model::QKModel{T,T2}, 
-                   t::Int)
+- `t::Int`:  
+  The time index (1-based).
 
-In-place update of the predicted measurement `Y_ttm1[t]` when both 
-the measurement and observation are stored as vectors.
+# Behavior
+Sets  
+Y_ttm1[:, t] = A + B_aug * Z_ttm1[:, t] + alpha * Y[:, t]``
+in place.  
+This operation is purely linear, hence **AD-friendly** in most Julia AD frameworks.
 
-# Arguments
-- `Y_ttm1::AbstractVector{T}`: A 1D array for predicted measurements, 
-  storing the result at index `t`.
-- `Z_ttm1::AbstractMatrix{T}`: (P×T̄) predicted states array.
-- `Y::AbstractVector{T1}`: 1D array of actual measurements over time (size ≥ t).
-- `model::QKModel{T,T2}`: Holds `A::Vector{T}`, `B̃::Matrix{T}`, 
-  `alpha::Matrix{T}` or scalar, etc.  
-- `t::Int`: The time index.
-
-# Details
-Computes `Y_ttm1[t] = (A + B̃ * Z_ttm1[:, t] + alpha * Y[t])[1]`, 
-assuming `A` might be a 1-element vector, `alpha` is effectively 
-(1×1), etc. Overwrites `Y_ttm1[t]` in place.
-
-Useful for a univariate measurement scenario where measurement arrays 
-are stored as vectors. AD-friendly as a single linear operation.
+# Notes
+- For **univariate** usage (M=1), store your data as `(1, T̄)`. Then this exact same function applies; you'll just be dealing with 1×T columns.
+- If you need a scalar at the end, you can index `Y_ttm1[1, t]`.
 
 """
-function predict_Y_ttm1!(Y_ttm1::AbstractVector{T}, Z_ttm1::AbstractMatrix{T},
-    Y::AbstractVector{T1}, model::QKModel{T,T2},
-    t::Int) where {T1 <: Real, T <: Real, T2 <: Real}
+function predict_Y_ttm1!(
+    Y_ttm1::AbstractMatrix{T},
+    Z_ttm1::AbstractMatrix{T},
+    Y::AbstractMatrix{T},
+    model::QKModel{T,T2},
+    t::Int) where {T<:Real, T2<:Real}
 
     @unpack A, alpha = model.meas
     @unpack B_aug = model.aug_state
-    # Typically A is [scalar], B̃ is (1×P), α is (1×1?), 
-    # so we do an indexing trick to retrieve a single scalar.
-    Y_ttm1[t] = (A .+ B_aug * Z_ttm1[:, t] .+ alpha .* Y[t])[1]
-end
 
-
-"""
-    predict_Y_ttm1!(Y_ttm1::AbstractMatrix{T}, 
-                   Z_ttm1::AbstractMatrix{T}, 
-                   Y::AbstractVector{T1}, 
-                   model::QKModel{T,T2}, 
-                   t::Int)
-
-In-place update of `Y_ttm1[:, t]` using a vector `Y` of observations.
-
-# Arguments
-- `Y_ttm1::AbstractMatrix{T}`: (M×T̄) predicted measurement array; 
-  we store the new column in `Y_ttm1[:, t]`.
-- `Z_ttm1::AbstractMatrix{T}`: (P×T̄) predicted states.
-- `Y::AbstractVector{T1}`: A 1D array of measurements over time (size ≥ t). 
-  Typically used if `M==1`, or if `alpha` maps a scalar observation into M dims.
-- `model::QKModel{T,T2}`: Model parameters, including 
-  `A`, `B_aug`, `alpha`.
-- `t::Int`: Time index.
-
-# Details
-`Y_ttm1[:, t] = A + B_aug*Z_ttm1[:, t] + alpha * Y[t]`.
-
-If `M > 1`, we interpret `alpha` as an (M×1) or (M×M) matrix that 
-broadcasts scalar Y[t] across M. 
-AD-friendly, single linear expression.
-
-"""
-function predict_Y_ttm1!(Y_ttm1::AbstractMatrix{T}, Z_ttm1::AbstractMatrix{T},
-    Y::AbstractVector{T1}, model::QKModel{T,T2}, 
-    t::Int) where {T1 <: Real, T <: Real, T2 <: Real}
-
-    @unpack A, alpha = model.meas
-    @unpack B_aug = model.aug_state
-    Y_ttm1[:, t] = A .+ B_aug * Z_ttm1[:, t] .+ alpha .* Y[t]
+    # Overwrite the t-th column in-place
+    Y_ttm1[:, t] = A .+ B_aug * Z_ttm1[:, t] .+ alpha * Y[:, t]
 end
 
 """
-    predict_Y_ttm1(Z_ttm1::AbstractMatrix{T}, 
-                   Y::AbstractMatrix{T1}, 
-                   model::QKModel{T,T2}, 
-                   t::Int) -> Vector{T}
+    predict_Y_ttm1(Z_ttm1, Y, model, t) -> Vector{T}
 
-Return a **new** predicted measurement vector for time `t`, 
-given matrix-based `Z_ttm1` and `Y`.
+Return a **newly allocated** predicted measurement for time `t`.
 
 # Arguments
-- `Z_ttm1::AbstractMatrix{T}`: (P×T̄) predicted states.
-- `Y::AbstractMatrix{T1}`: (M×T̄) actual observations.
-- `model::QKModel{T,T2}`: Contains `A`, `B_aug`, `alpha`.
-- `t::Int`: Time index.
+
+- `Z_ttm1::AbstractMatrix{T}`:  
+  `(P, T̄)` matrix of one-step-ahead predicted states. We read `Z_ttm1[:, t]`.
+
+- `Y::AbstractMatrix{T}`:  
+  `(M, T̄)` matrix of actual observations.
+  - For univariate data, you can reshape from a vector to `(1, T̄)`.
+
+- `model::QKModel{T,T2}`:  
+  Holds:
+  - `A::Vector{T}` (length M)
+  - `B_aug::Matrix{T}` (size M×P)
+  - `alpha::Matrix{T}` (size M×M or M×1)
+  etc.
+
+- `t::Int`:  
+  Time index.
 
 # Returns
-- `Vector{T}`: The predicted measurement at time `t`, 
-  computed as `A + B_aug*Z_ttm1[:, t] + alpha*Y[:, t]`.
+A `Vector{T}` of length `M`, computed via
+`A + B_aug * Z_ttm1[:, t] + alpha * Y[:, t]`
 
 # Details
-This version returns the result as a newly allocated vector. 
-Use it if you want a purely functional style with no in-place modifications.
+- This does **not** modify any arrays in place; it creates a fresh vector.  
+- If `M=1`, you'll get a length-1 vector containing the predicted scalar.
 
 """
-function predict_Y_ttm1(Z_ttm1::AbstractMatrix{T}, Y::AbstractMatrix{T1},
-    model::QKModel{T,T2}, t::Int) where {T1<:Real, T<:Real, T2<:Real}
+function predict_Y_ttm1(
+    Z_ttm1::AbstractMatrix{T},
+    Y::AbstractMatrix{T},
+    model::QKModel{T,T2},
+    t::Int) where {T<:Real, T2<:Real}
 
     @unpack A, alpha = model.meas
     @unpack B_aug = model.aug_state
+
+    # Allocate a new vector as the sum
     return A .+ B_aug * Z_ttm1[:, t] .+ alpha * Y[:, t]
 end
-
-"""
-    predict_Y_ttm1(Z_ttm1::AbstractVector{T}, 
-                   Y::AbstractVector{T1}, 
-                   model::QKModel{T,T2}, 
-                   t::Int) -> Real (or 1-element vector)
-
-Compute a new predicted measurement for univariate (or effectively scalar) 
-observation, returning the result as a scalar.
-
-# Arguments
-- `Z_ttm1::AbstractVector{T}`: The predicted state vector of dimension P.
-- `Y::AbstractVector{T1}`: The (univariate) actual observations over time.
-- `model::QKModel{T,T2}`: Must hold `A::Vector{T}` (often length=1), 
-  `B̃::Matrix{T}` (size 1×P?), `α::Matrix{T}` or scalar for the measurement update.
-- `t::Int`: Time index.
-
-# Returns
-A single real number `predict_val`, computed as `(A + B_aug*Z_ttm1 + alpha*Y[t])[1]`.
-
-# Details
-- If `A` has length > 1, or `B_aug` is larger, you might effectively get the first element. 
-- For truly univariate measurement, this is a simpler approach.
-"""
-function predict_Y_ttm1(Z_ttm1::AbstractVector{T}, Y::AbstractVector{T1},
-    model::QKModel{T,T2}, t::Int) where {T1<:Real, T<:Real, T2<:Real}
-
-    @unpack A, alpha = model.meas
-    @unpack B_aug = model.aug_state
-    return (A .+ B_aug*Z_ttm1 .+ alpha .* Y[t])[1]
-end
-
 
 """
     predict_M_ttm1!(M_ttm1, P_ttm1, tmpB, model, t)
@@ -482,7 +402,6 @@ function predict_M_ttm1!(M_ttm1::AbstractArray{T,3}, P_ttm1::AbstractArray{T,3},
     end
 end
 
-
 """
     predict_M_ttm1(P_ttm1::AbstractMatrix{T}, model::QKModel{T,T2})
                   -> Matrix{T}
@@ -536,353 +455,234 @@ function predict_M_ttm1(P_ttm1::AbstractMatrix{T}, model::QKModel{T,T2}) where
     end
 end
 
-
-
 """
-    compute_K_t!(K_t::AbstractArray{Real,3}, 
-                P_ttm1::AbstractArray{Real,3},
-                M_ttm1::AbstractArray{Real,3}, 
-                tmpPB::AbstractMatrix{T}, 
-                model::QKModel{T,T2}, 
-                t::Int)
+    compute_K_t!(K_t, P_ttm1, M_ttm1, tmpB, model, t)
 
-In-place computation of the **Kalman gain** `K_ttm1[:, :, t]` for a **univariate** measurement 
-scenario (i.e., `M=1`) within a Kalman or QKF step.
+In-place computation of the Kalman Gain `K_t[:, :, t]` for **any** measurement dimension `M ≥ 1`.
 
 # Arguments
-- `K_ttm1::AbstractArray{Real,3}`: A `(P×M×T̄)` array (often `(P×1×T̄)`) storing the Kalman gain.
-  We write the result into `K_ttm1[:, :, t]`.
-- `P_ttm1::AbstractArray{Real,3}`: One-step-ahead predicted covariance, `(P×P×T̄)`.
-- `M_ttm1::AbstractArray{Real,3}`: Predicted measurement covariance, `(M×M×T̄)`. 
-  For `M=1`, this is a `1×1×T̄`.
-- `tmpPB::AbstractMatrix{T}`: A working buffer `(P×M)` if needed, but currently unused 
-  in your snippet.
-- `model::QKModel{T,T2}`: Must contain:
-  - `B_aug::Matrix{T}` (size `M×P`),
-  - `M, P::Int` for dimensions.
-- `t::Int`: Time index.
+
+- `K_t::AbstractArray{T,3}`:  
+  A 3D array of size `(P, M, T̄)` storing Kalman gains over time.  
+  We will overwrite the slice `K_t[:, :, t]`.
+
+- `P_ttm1::AbstractArray{T,3}`:  
+  The one-step-ahead predicted state covariance `(P, P, T̄)`.  
+  We read `P_ttm1[:, :, t]`.
+
+- `M_ttm1::AbstractArray{T,3}`:  
+  The measurement prediction covariance `(M, M, T̄)`.  
+  We read `M_ttm1[:, :, t]`.
+
+- `tmpB::AbstractMatrix{T}`:  
+  A working buffer `(M, P)` or `(P, M)` used for multiplication or solves. 
+  Size depends on your approach. This is optional if you do not strictly need it.
+
+- `model::QKModel{T,T2}`:  
+  Must hold:
+  - `B_aug::Matrix{T}` of size `(M, P)`
+  - Possibly `M, P::Int`
+  - etc.
+
+- `t::Int`:  
+  Time index (1-based).
 
 # Details
-We compute:
-```julia
-K_t[:, :, t] = (P_ttm1[:, :, t] * B_aug') / M_ttm1[:, :, t]
-```
-# Notes:
-- If M_ttm1[:, :, t] is 1×1, the division is just a scalar divide. For genuine multivariate M>1, one would typically do a matrix inverse or solve. This snippet is thus best suited for univariate measurement.
-- The in-place assignment .= ... is AD-friendly if your AD can handle assignment to slices in a 3D array. If needed, define or use a custom adjoint.
+
+We compute the Kalman gain **in place**:
+`S = B_aug * P_ttm1[:,:,t] * B_aug' + M_ttm1[:,:,t] K = P_ttm1[:,:,t] * B_aug' * inv(S)`
+storing `K` into `K_t[:, :, t]`.
+
+- If `M == 1`, `S` is `1×1`, so we do a simple scalar division.
+- If `M > 1`, we do a matrix factorization/solve.
+
+**AD-Friendliness**: Using standard `inv`, `cholesky`, or `lu` is typically well-supported. 
+For big `M`, prefer a `\` solve instead of `inv`.
+
 """
-function compute_K_t!(K_t::AbstractArray{Real,3}, P_ttm1::AbstractArray{Real,3},
-    M_ttm1::AbstractArray{Real,3}, tmpPB::AbstractMatrix{T}, model::QKModel{T,T2},
-    t::Int) where {T <: Real, T2 <: Real}
+function compute_K_t!(
+  K_t::AbstractArray{T,3},
+  P_ttm1::AbstractArray{T,3},
+  M_ttm1::AbstractArray{T,3},
+  tmpB::AbstractMatrix{T},
+  model::QKModel{T,T2},
+  t::Int) where {T<:Real, T2<:Real}
+
+  @unpack B_aug = model.aug_state
+
+  # 1) Extract slices at time t
+  local P_pred = @view P_ttm1[:, :, t]  # (P×P)
+  local M_pred = @view M_ttm1[:, :, t]  # (M×M)
+  local Kslice = @view K_t[:, :, t]     # (P×M)
+
+  # 2) Compute K_pre = P_pred * B_aug' (no redundant S term)
+  mul!(Kslice, P_pred, B_aug', 1.0, 0.0)  # Kslice = P_pred * B_aug'
+
+  # 3) Compute the Kalman gain using M_pred directly
+  if size(M_pred,1) == 1
+      # Scalar case
+      @. Kslice = Kslice / M_pred[1, 1]
+  else
+      # Matrix solve: Kslice = (P_pred * B_aug') * inv(M_pred)
+      F = lu(M_pred)  # Use M_pred instead of S
+      for col in 1:size(Kslice,2)
+          Kslice[:, col] = F \ Kslice[:, col]
+      end
+  end
+end
+
+"""
+    compute_K_t(P_ttm1, M_ttm1, model, t) -> Matrix{T}
+
+Return the Kalman gain `K_t` for measurement dimension `M ≥ 1`, 
+using the one-step-ahead state covariance and measurement covariance.
+
+# Arguments
+- `P_ttm1::AbstractMatrix{T}`: `(P×P)` the one-step-ahead predicted covariance.
+- `M_ttm1::AbstractMatrix{T}`: `(M×M)` the measurement covariance for the current step.
+- `model::QKModel{T,T2}`: Must hold:
+  - `B_aug::Matrix{T}` of size `(M, P)`,
+  - Possibly `M, P::Int`,
+  - etc.
+- `t::Int`: Time index (not strictly needed, but included for consistency).
+
+# Returns
+A newly allocated `(P×M)` Kalman Gain matrix, computed by:
+`S = B_augP_ttm1B_aug' + M_ttm1 K = (P_ttm1*B_aug') * inv(S)`
+- If `M=1`, S is `1×1`, so we do a scalar division.
+- If `M>1`, we do a matrix solve or factorization-based inverse.
+
+# Notes
+- This function does **not** modify its inputs in place.
+- For large `M`, prefer a factorization-based approach 
+  (e.g. `lu(S); K = K / S`) instead of `inv(S)` for better performance.
+
+"""
+function compute_K_t(
+    P_ttm1::AbstractMatrix{T},
+    M_ttm1::AbstractMatrix{T},
+    model::QKModel{T,T2},
+    t::Int) :: Matrix{T} where {T<:Real, T2<:Real}
 
     @unpack B_aug = model.aug_state
 
-    # For univariate M=1: (Pₜₜ₋₁ * B̃') is (P×1). Then we divide by Mₜₜ₋₁(1,1,t).
-    # Directly do an elementwise assignment.
-    K_t[:, :, t] .= (P_ttm1[:, :, t] * B_aug') ./ M_ttm1[:, :, t]
+    # 1) K_pre = P_ttm1 * B_aug'
+    K_pre = P_ttm1 * B_aug'
+
+    # 2) Create K
+    local K::Matrix{T}
+    if size(M_ttm1,1) == 1
+        # M=1 => scalar
+        denom = M_ttm1[1,1]
+        K = K_pre ./ denom  # elementwise
+    else
+        # M>1 => do a solve
+        F = lu(M_ttm1)
+        # We'll solve S * K' = K_pre' to get K
+        K = similar(K_pre)
+        # Solve the transposed system and transpose back
+        K .= (F \ K_pre')'
+    end
+
+    return K
 end
 
 """
-    compute_K_t(P_ttm1::AbstractMatrix{T}, 
-               M_ttm1::AbstractMatrix{T},
-               model::QKModel{T,T2}, 
-               t::Int) -> Matrix{T}
+    update_Z_tt!(Z_tt, K_t, Y, Y_ttm1, Z_ttm1, t)
 
-Compute and **return** the Kalman gain `K_ttm1` for a **univariate** measurement scenario, 
-given `P_ttm1` and `M_ttm1`.
+In-place update of the augmented state `Z_tt[:, t+1]` at time `t+1` 
+using the current measurements and the Kalman gain.
 
 # Arguments
-- `P_ttm1::AbstractMatrix{T}`: `(P×P)` one-step-ahead predicted covariance for the state.
-- `M_ttm1::AbstractMatrix{T}`: `(M×M)` measurement covariance. 
-- `model::QKModel{T,T2}`: Must contain:
-  - `B_aug::Matrix{T}` (size `M×P`),
-  - Possibly `M, P::Int` if needed.
-- `t::Int`: Time index (not used in the snippet, but might be for consistency).
+- `Z_tt::AbstractMatrix{T}`: 
+  A `(P×T̄)` array holding the **filtered** or updated states. We will overwrite 
+  column `t+1`.
+- `K_t::AbstractArray{T,3}`: 
+  A `(P×M×T̄)` 3D array of Kalman gains. We read `K_t[:, :, t]` (size `(P×M)`).
+- `Y::AbstractMatrix{T}`: 
+  The actual measurement data, size `(M×T̄)`. If univariate, shape is `(1×T̄)`.
+- `Y_ttm1::AbstractMatrix{T}`: 
+  The predicted measurement, also `(M×T̄)`. We read column `t` for time step.
+- `Z_ttm1::AbstractMatrix{T}`: 
+  The one-step-ahead predicted state `(P×T̄)`. We read column `t`.
+- `t::Int`: 
+  The (1-based) time index.
 
 # Returns
-- `Matrix{T}`: The Kalman gain of size `(P×M)`. 
-  If `M=1`, then `(P×1)` is returned.
+Nothing. It modifies `Z_tt[:, t+1]` **in-place** to:
+`Z_tt[:, t+1] = Z_ttm1[:, t] + K_t[:, :, t] * ( Y[:, t] - Y_ttm1[:, t] )`
 
-# Notes:
-- If Mₜₜ₋₁ is 1×1, S is also a 1×1. The / operator is scalar division.
-- For multi-dimensional S, you'd typically invert or solve. This snippet is thus best for univariate measurement.
+# Notes
+- For univariate data (`M=1`), both `Y` and `Y_ttm1` are `(1×T̄)`. 
+- No separate overload needed; the same code covers scalar or vector measurements, 
+  because it's all matrix-based with a single row if univariate.
+- This is **AD-friendly** for typical Julia AD frameworks, 
+  though in-place mutation sometimes needs a custom adjoint.
 
-# Details
-We do:
-```julia
-S = B_aug * P_ttm1 * B_aug' + M_ttm1
-K = P_ttm1 * B_aug' / S
-```
 """
-function compute_K_t(P_ttm1::AbstractMatrix{T}, M_ttm1::AbstractMatrix{T},
-    model::QKModel{T,T2}, t::Int ) where {T <: Real, T2 <: Real}
+function update_Z_tt!(
+    Z_tt::AbstractMatrix{T},
+    K_t::AbstractArray{T,3},
+    Y::AbstractMatrix{T},
+    Y_ttm1::AbstractMatrix{T},
+    Z_ttm1::AbstractMatrix{T},
+    t::Int) where {T<:Real}
+
+    # Core linear update
+    Z_tt[:, t+1] = Z_ttm1[:, t] .+ K_t[:, :, t] * (Y[:, t] .- Y_ttm1[:, t])
+end
+
+"""
+    update_Z_tt(K_t, Y, Y_ttm1, Z_ttm1, t) -> Vector{T}
+
+Return a **newly allocated** updated state vector for time `t+1`, using the Kalman gain 
+and measurement data.
+
+# Arguments
+- `K_t::AbstractArray{T,3}`: 
+  A 3D array of Kalman gains `(P×M×T̄)`. 
+  We read `K_t[:, :, t]`, which is `(P×M)`.
+
+- `Y::AbstractMatrix{T}`: 
+  The measurement array `(M×T̄)`. 
+  For univariate data, shape `(1×T̄)`.
+
+- `Y_ttm1::AbstractMatrix{T}`: 
+  The predicted measurement `(M×T̄)`. 
+  We read column `t` for time step.
+
+- `Z_ttm1::AbstractMatrix{T}`: 
+  The one-step-ahead predicted state `(P×T̄)`, 
+  from which we read column `t`.
+
+- `t::Int`: 
+  Time index (1-based).
+
+# Returns
+A newly allocated vector of length `P`, computed via:
+`Z_next = Z_ttm1[:, t] + K_t[:, :, t] * ( Y[:, t] - Y_ttm1[:, t] )`
+
+# Notes
+- This is the **out-of-place** version, returning a fresh vector each time.
+- Useful if you prefer a purely functional style or if you want to keep 
+  your existing arrays immutable for AD.
+
+"""
+function update_Z_tt(
+    K_t::AbstractArray{T,3},
+    Y::AbstractVecOrMat{T},
+    Y_ttm1::AbstractMatrix{T},
+    Z_ttm1::AbstractMatrix{T},
+    t::Int) :: Vector{T} where {T<:Real}
+
+    # Handle both vector and matrix Y inputs
+    current_Y = Y isa AbstractVector ? Y[t+1] : Y[:, t+1]
     
-    @unpack B_aug = model.aug_state
+    # Compute innovation
+    innovation = current_Y .- Y_ttm1[:, t]
     
-    # 1) S is a 1×1 if M=1. Then S[1,1] is the scalar denominator.
-    S = B_aug * P_ttm1 * B_aug' .+ M_ttm1
-    
-    # 2) The gain K is (P×M).
-    return P_ttm1 * B_aug' ./ S
-end
-
-"""
-    update_Z_tt!(Z_tt::AbstractMatrix{T}, 
-                 K_t::AbstractArray{Real,3}, 
-                 Y_t::AbstractMatrix{T1}, 
-                 Y_ttm1::AbstractMatrix{T}, 
-                 Z_ttm1::AbstractMatrix{T}, 
-                 tmpϵ::AbstractVector{T}, 
-                 t::Int)
-
-In-place update of the augmented state `Z_tt[:, t+1]` given:
-- A measurement vector `Y_t[:, t]` stored in a matrix `(M×T̄)`,
-- A predicted measurement `Y_ttm1[:, t]` also in `(M×T̄)`,
-- The one-step-ahead state `Z_ttm1[:, t]`,
-- and a Kalman-like gain `K_t[:, :, t]` of size `(P×M)`.
-
-# Arguments
-- `Z_tt::AbstractMatrix{T}`: (P×T̄) storing the **updated** states in column `t+1`.
-- `K_t::AbstractArray{Real,3}`: A `(P×M×T̄)` array of gains.
-- `Y_t::AbstractMatrix{T1}`: Measurement data of size `(M×T̄)`.
-- `Y_ttm1::AbstractMatrix{T}`: Predicted measurement `(M×T̄)`.
-- `Z_ttm1::AbstractMatrix{T}`: One-step-ahead predicted state `(P×T̄)`.
-- `tmp_eps::AbstractVector{T}`: A temporary buffer of length `M`, if needed for manual loops.
-- `t::Int`: The time index (1-based).
-
-# Details
-We perform: Z_tt[:, t+1] = Z_tt[:, t] + K_t[:, :, t] * (Y_t[:, t] - Y_ttm1[:, t])
-in place. `tmp_eps` can be used if you want a manual loop approach, but here we do 
-the direct matrix expression. This is AD-friendly in many frameworks, though 
-in-place writes can require custom adjoints depending on the AD library.
-
-"""
-function update_Z_tt!(Z_tt::AbstractMatrix{T}, K_t::AbstractArray{Real,3},
-    Y_t::AbstractMatrix{T1}, Y_ttm1::AbstractMatrix{T}, Z_ttm1::AbstractMatrix{T}, 
-    tmp_eps::AbstractVector{T}, t::Int) where {T1<:Real, T<:Real}
-
-    Z_tt[:, t + 1] = Z_tt[:, t] .+ K_t[:, :, t] * (Y_t[:, t] .- Y_ttm1[:, t])
-end
-
-"""
-    update_Z_tt(K_t::AbstractArray{Real,3}, 
-                Y_t::AbstractMatrix{T1},
-                Y_ttm1::AbstractMatrix{T1}, 
-                Z_ttm1::AbstractMatrix{T1}, 
-                t::Int)
-
-Return a newly updated state vector for time `t+1` given matrix-based measurements.
-
-# Arguments
-- `K_t::AbstractArray{Real,3}`: (P×M×T̄) Kalman gains.
-- `Y_t::AbstractMatrix{T1}`, `Y_ttm1::AbstractMatrix{T1}`: (M×T̄) measurement and predicted measurement.
-- `Z_ttm1::AbstractMatrix{T1}`: (P×T̄) the predicted state.
-- `t::Int`: Time index.
-
-# Returns
-- `Vector{T1}`: The updated state at time `t+1`, 
-  computed as `Z_ttm1[:, t] + K_t[:, :, t]*(Y_t[:, t] - Y_ttm1[:, t])`.
-
-# Details
-This is a purely functional approach, allocating a new vector. 
-It's often simpler for AD, as it avoids in-place modifications.
-
-"""
-function update_Z_tt(K_t::AbstractArray{T,3}, Y_t::AbstractMatrix{T1},
-    Y_ttm1::AbstractMatrix{T1}, Z_ttm1::AbstractMatrix{T1}, 
-    t::Int) where {T1<:Real, T<:Real}
-
-    return Z_ttm1[:, t] .+ K_t[:, :, t] * (Y_t[:, t] .- Y_ttm1[:, t])
-end
-
-
-"""
-    update_Z_tt!(Z_tt::AbstractMatrix{T}, 
-                 K_t::AbstractArray{Real,3},
-                 Y_t::AbstractVector{T1}, 
-                 Y_ttm1::AbstractVector{T}, 
-                 Z_ttm1::AbstractMatrix{T},
-                 tmpϵ::AbstractVector{T}, 
-                 t::Int)
-
-In-place update of `Z_tt[:, t+1]` when the measurement `Y_t` and predicted measurement `Y_ttm1`
-are stored as 1D arrays (univariate or effectively scalar per time).
-
-# Arguments
-- `Z_tt::AbstractMatrix{T}`: Updated states are stored in `Z_tt[:, t+1]`.
-- `K_t::AbstractArray{Real,3}`: Gains `(P×M×T̄)`.
-- `Y_t::AbstractVector{T1}`, `Y_ttm1::AbstractVector{T}`: 1D arrays storing values at index `t`.
-- `Zₜₜ₋₁::AbstractMatrix{T}`: Predicted state `(P×T̄)`.
-- `tmpϵ::AbstractVector{T}`: Temp buffer for difference if needed.
-
-# Details
-We do Z_tt[:, t+1] = Z_tt[:, t] + K_t[:, :, t]*(Y_t[t] - Y_ttm1[t])
-in place. Typically `M=1` in this scenario.
-
-"""
-function update_Z_tt!(Z_tt::AbstractMatrix{T}, K_t::AbstractArray{Real,3},
-    Y_t::AbstractVector{T1}, Y_ttm1::AbstractVector{T}, Z_ttm1::AbstractMatrix{T},
-    tmp_eps::AbstractVector{T}, t::Int) where {T1<:Real, T<:Real}
-
-    Z_tt[:, t + 1] = Z_tt[:, t] .+ K_t[:, :, t] * (Y_t[t] - Y_ttm1[t])
-end
-
-
-"""
-    update_Z_tt(K_t::AbstractArray{Real,3},
-                Y_t::AbstractVector{T1},
-                Y_ttm1::AbstractVector{T},
-                Z_ttm1::AbstractMatrix{T},
-                t::Int)
-
-Return a new updated state for time `t+1` in a univariate measurement scenario, 
-where `Y_t` and `Y_ttm1` are 1D arrays.
-
-# Arguments
-- `K_t::AbstractArray{Real,3}`: (P×M×T̄) gains.
-- `Y_t::AbstractVector{T1}`, `Y_ttm1::AbstractVector{T}`: 1D arrays with the observation at `Y_t[t]`
-  and predicted at `Y_ttm1[t]`.
-- `Zₜₜ₋₁::AbstractMatrix{T}`: (P×T̄) predicted states.
-
-# Returns
-A newly allocated vector `(P×1)` for time `t+1`, computed as: 
-`Zₜₜ₋₁[:, t] + Kₜ[:, :, t]*(Yₜ[t] - Yₜₜ₋₁[t])`.
-This is a purely functional approach.
-
-"""
-function update_Z_tt(K_t::AbstractArray{Real,3}, Y_t::AbstractVector{T1},
-    Y_ttm1::AbstractVector{T}, Z_ttm1::AbstractMatrix{T}, t::Int) where {T1<:Real, T<:Real}
-
-    return Z_ttm1[:, t] .+ K_t[:, :, t] * (Y_t[t] - Y_ttm1[t])
-end
-
-"""
-    update_Z_tt!(Z_tt::AbstractMatrix{T}, 
-                 K_t::AbstractArray{Real,3},
-                 Y_t::AbstractMatrix{T1}, 
-                 Y_ttm1::AbstractVector{T},
-                 Z_ttm1::AbstractMatrix{T},
-                 tmpϵ::AbstractVector{T},
-                 t::Int)
-
-In-place update of `Z_tt[:, t+1]` with a **mixed** scenario:
-- `Y_t` is `(M×T̄)`,
-- `Y_ttm1` is `(M×1)?` or a vector storing predicted measurement at index `t`.
-
-# Arguments
-- `Z_tt::AbstractMatrix{T}`, `Z_ttm1::AbstractMatrix{T}`: (P×T̄) augmented states.
-- `K_t::AbstractArray{Real,3}`: (P×M×T̄) gains.
-- `Y_t::AbstractMatrix{T1}`: (M×T̄) measurement.
-- `Yₜₜ₋₁::AbstractVector{T}`: (M) predicted measurement at time `t`.
-- `tmpϵ::AbstractVector{T}`: temp buffer if needed.
-
-# Details
-Update rule:
-`Z_tt[:, t+1] = Z_tt[:, t] + K_t[:, :, t]*(Y_t[:, t] - Y_ttm1[t])`
-Note that `Y_ttm1[t]` might be used if `Y_ttm1` has length `M`, 
-and we broadcast or something similar. 
-Keep track that dimensional consistency is correct for your usage.
-
-"""
-function update_Z_tt!(Z_tt::AbstractMatrix{T}, K_t::AbstractArray{Real,3}, 
-    Y_t::AbstractMatrix{T1}, Y_ttm1::AbstractVector{T}, Z_ttm1::AbstractMatrix{T},
-    tmp_eps::AbstractVector{T}, t::Int) where {T1<:Real, T<:Real}
-
-    Z_tt[:, t + 1] = Z_ttm1[:, t] .+ K_t[:, :, t] * (Y_t[:, t] .- Y_ttm1[t])
-end
-
-"""
-    update_Z_tt(K_t::AbstractArray{Real,3},
-                Y_t::AbstractMatrix{T1},
-                Y_ttm1::AbstractVector{T},
-                Z_ttm1::AbstractMatrix{T},
-                t::Int)
-
-Return a new state update with measurement `Y_t` as (M×T̄), 
-but `Y_ttm1` as an (M) vector indexing `t` for the predicted measurement. 
-This is a somewhat "mixed" usage scenario.
-
-# Arguments
-- `K_t::AbstractArray{Real,3}`: Gains `(P×M×T̄)`.
-- `Y_t::AbstractMatrix{T1}`: `(M×T̄)` measurements.
-- `Y_ttm1::AbstractVector{T}`: size `M` predicted measurement, used at index `t`.
-- `Zₜₜ₋₁::AbstractMatrix{T}`: `(P×T̄)` predicted states.
-
-# Returns
-A `(P×1)` updated state vector for time `t+1`, 
-via `Z_ttm1[:, t] + K_t[:, :, t] * (Y_t[:, t] - Y_ttm1[t])`.
-
-"""
-function update_Z_tt(K_t::AbstractArray{Real,3}, Y_t::AbstractMatrix{T1},
-    Y_ttm1::AbstractVector{T}, Z_ttm1::AbstractMatrix{T}, t::Int) where {T1<:Real, T<:Real}
-
-    return Z_ttm1[:, t] .+ K_t[:, :, t] * (Y_t[:, t] .- Y_ttm1[t])
-end
-
-
-"""
-    update_Z_tt!(Z_tt::AbstractMatrix{T}, 
-                 K_t::AbstractArray{Real,3},
-                 Y_t::AbstractVector{T1}, 
-                 Y_ttm1::AbstractMatrix{T},
-                 Z_ttm1::AbstractMatrix{T},
-                 tmp_eps::AbstractVector{T}, 
-                 t::Int)
-
-In-place update of the state with a "mixed" scenario:
-- `Y_t` is 1D (size `M×1`?), 
-- `Y_ttm1` is `(M×T̄)`?
-
-# Arguments
-- `Z_tt::AbstractMatrix{T}`, `Z_ttm1::AbstractMatrix{T}`: State arrays `(P×T̄)`.
-- `K_t::AbstractArray{Real,3}`: Gains `(P×M×T̄)`.
-- `Y_t::AbstractVector{T1}`, `Y_ttm1::AbstractMatrix{T}`: 
-  The actual measurement at `Yₜ[t]`, predicted measurement at `Yₜₜ₋₁[:, t]`.
-- `tmp_eps::AbstractVector{T}`: buffer if needed.
-
-# Implementation
-`Z_tt[:, t+1] = Z_ttm1[:, t] + K_t[:, :, t]*(Y_t[t] - Y_ttm1[:, t])`
-Dimension checks are up to the user; ensure consistent shapes for broadcast.
-
-"""
-function update_Z_tt!(Z_tt::AbstractMatrix{T}, K_t::AbstractArray{Real,3},
-    Y_t::AbstractVector{T1}, Y_ttm1::AbstractMatrix{T}, Z_ttm1::AbstractMatrix{T},
-    tmp_eps::AbstractVector{T}, t::Int) where {T1<:Real, T<:Real}
-
-    Z_tt[:, t + 1] = Z_ttm1[:, t] .+ K_t[:, :, t] * (Y_t[t] - Y_ttm1[:, t])
-end
-
-"""
-    update_Z_tt(K_t::AbstractMatrix{T}, 
-                Y_t::Real, 
-                Y_ttm1::Real, 
-                Z_ttm1::AbstractVector{T}, 
-                t::Int)
-
-Return a new updated state when:
-- `K_t` is `(P×1)`,
-- `Y_t` and `Y_ttm1` are scalar reals,
-- `Z_ttm1` is `(P×1)` or `Vector{T}`.
-
-# Arguments
-- `K_t::AbstractMatrix{T}`: The gain (P×1).
-- `Y_t::Real`: The scalar measurement at time `t`.
-- `Y_ttm1::Real`: The predicted scalar measurement.
-- `Z_ttm1::AbstractVector{T}`: The predicted state (P).
-
-# Returns
-- `Vector{T}`: The new updated state: `Zₜₜ₋₁ + Kₜ*(Yₜ - Yₜₜ₋₁)`.
-
-# Description
-This is the simplest possible scenario: 
-**univariate** measurement (`Y_t` is a real) 
-and a vector state `(P×1)`. We do a purely functional 
-update returning a brand-new `Vector{T}`.
-
-"""
-function update_Z_tt(K_t::AbstractMatrix{T}, Y_t::Real, Y_ttm1::Real, Z_ttm1::AbstractVector{T}, t::Int) where {T <: Real}
-
-    return Z_ttm1 .+ K_t * (Y_t - Y_ttm1)
+    # Return updated state
+    return Z_ttm1[:, t] .+ K_t[:, :, t] * innovation
 end
 
 """
@@ -923,7 +723,7 @@ covariance `P_ttm1[:, :, t]`, and the Kalman gain `K_t[:, :, t]`.
    custom adjoint, it should be fine. Otherwise, consider a purely functional approach.
 """
 function update_P_tt!( P_tt::AbstractArray{Real,3}, K_t::AbstractArray{Real,3},
-    M_ttm1::AbstractArray{Real,3}, P_ttm1::AbstractArray{Real,3},
+    P_ttm1::AbstractArray{Real,3},
     Z_ttm1::AbstractArray{Real,2}, tmpKM::AbstractMatrix{Real},
     tmpKMK::AbstractMatrix{Real}, model::QKModel{T,T2}, t::Int ) where {T<:Real, T2<:Real}
     @unpack V = model.meas
@@ -964,18 +764,18 @@ given a predicted covariance `P_ttm1`, a Kalman gain `K_t`.
    you want a direct forward pass without in-place modifications.
 
 """
-function update_P_tt( K_t::AbstractMatrix{T5}, M_ttm1::AbstractMatrix{T6},
+function update_P_tt(K_t::AbstractMatrix{T5},
     P_ttm1::AbstractMatrix{T3}, Z_ttm1::AbstractVector{T4}, model::QKModel{T,T2},
-    t::Int ) where {T<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real}
+    t::Int ) where {T<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
     @unpack V = model.meas
     @unpack B_aug = model.aug_state
 
 
     # 1) A = I - K_t*B_aug
-    local A = I - K_t*B_aug
+    A = I - K_t*B_aug
 
     # 2) Build the new covariance
-    local P = A * P_ttm1 * A' .+ (K_t * V * K_t')
+    P = A * P_ttm1 * A' .+ (K_t * V * K_t')
 
     # 4) Ensure positivity
     if !isposdef(P)
@@ -1040,7 +840,6 @@ function correct_Z_tt!(Z_tt::AbstractMatrix{T1}, model::QKModel{T, T2}, t::Int) 
     return nothing
 end
 
-
 """
     correct_Z_tt(Z_tt, model, t) -> Vector
 
@@ -1064,27 +863,32 @@ using a simple ε-shift instead of eigenvalue truncation.
 Returns the newly constructed vector, leaving the original unchanged.
 """
 function correct_Z_tt(Z_tt::AbstractVector{T1}, model::QKModel{T,T2}, t::Int) where 
-    {T1 <: Real, T <: Real, T2 <: Real}
+  {T1 <: Real, T <: Real, T2 <: Real}
 
-    @unpack N = model.state
-    
-    # 1) Extract xₜ
-    xt = Z_tt[1:N]
-    
-    # 2) Extract XX'
-    XtXt_prime = reshape(Z_tt[N+1:end], N, N)
-    
-    # 3) implied_cov = XX' - xₜ xₜ'
-    implied_cov = XtXt_prime - xt*xt'
-    
-    # 4) Simple "ε-shift" to ensure PSD
-    ε = sqrt(eps(T))
-    corrected_cov = implied_cov + ε*I(N)
-    
-    # 5) Recombine => xₜ and (corrected_cov + xₜ xₜ')
-    return vcat(xt, vec(corrected_cov + xt*xt'))
+  @unpack N = model.state
+  
+  # 1) Extract xₜ
+  xt = Z_tt[1:N]
+  
+  # 2) Extract XX'
+  XtXt_prime = reshape(Z_tt[N+1:end], N, N)
+  
+  # 3) Compute implied covariance matrix
+  implied_cov = Symmetric(XtXt_prime - xt * xt')  # Enforce symmetry for eigen
+  
+  # 4) Eigenvalue-based correction (AD-friendly)
+  F = LinearAlgebra.eigen(implied_cov)
+  eigs_corrected = max.(F.values, zero(T))  # Clamp negative eigenvalues to 0
+  corrected_cov = F.vectors * Diagonal(eigs_corrected) * F.vectors'
+  
+  # 5) Ensure symmetry (due to potential floating point errors)
+  corrected_cov = Symmetric(corrected_cov)
+  
+  # 6) Recombine xₜ with corrected XX'
+  corrected_XX = corrected_cov + xt * xt'
+  
+  return vcat(xt, vec(corrected_XX))
 end
-
 
 #Quadratic Kalman Filter
 """
@@ -1199,7 +1003,7 @@ function qkf_filter!(data::QKData{T1, 1},
     K_t = zeros(T, P, M, T_bar)
     tmpP = zeros(T, P, P)
     tmpB = zeros(T, M, P)
-    Y_ttm1 = zeros(T, T_bar)
+    Y_ttm1 = zeros(T, M, T_bar)
     M_ttm1 = zeros(T, M, M, T_bar)
     tmpPB = zeros(T, P, M)
     ll_t = zeros(Float64, T_bar)
@@ -1222,7 +1026,7 @@ function qkf_filter!(data::QKData{T1, 1},
         predict_P_tt!(P_tt, P_ttm1, Sigma_ttm1, Z_tt, tmpP, model, t)
 
         # Observation Prediction: Yₜₜ₋₁ = A + B̃Zₜₜ₋₁, Mₜₜ₋₁ = B̃Pₜₜ₋₁B̃' + V
-        predict_Y_tt!(Y_ttm1, Z_ttm1, Y, model, t)
+        predict_Y_ttm1!(Y_ttm1, Z_ttm1, Y, model, t)
         predict_M_ttm1!(M_ttm1, P_ttm1, tmpB, model, t)
 
         # Kalman Gain: Kₜ = Pₜₜ₋₁B̃′/Mₜₜ₋₁
@@ -1230,7 +1034,7 @@ function qkf_filter!(data::QKData{T1, 1},
 
         # Update States: Zₜₜ = Zₜₜ₋₁ + Kₜ(Yₜ - Yₜₜ₋₁); Pₜₜ = Pₜₜ₋₁ - KₜMₜₜ₋₁Kₜ'
         update_Z_tt!(Z_tt, K_t, Y_t, Y_ttm1, Z_ttm1, tmp_eps, model, t)
-        update_P_tt!(P_tt, K_t, M_ttm1, P_ttm1, Z_ttm1, tmpKM, tmpKMK, model, t)
+        update_P_tt!(P_tt, K_t, P_ttm1, Z_ttm1, tmpKM, tmpKMK, model, t)
 
         #Correct for update
         correct_Z_tt!(Z_tt, model, t)
@@ -1322,21 +1126,30 @@ result = qkf_filter(data, model)
 @show result.Z_tt[:, end]   # final state
 '''
 """
-function qkf_filter(data::QKData{T1, 1},
-    model::QKModel{T,T2}) where {T1 <: Real, T <: Real, T2 <: Real}
+function qkf_filter(data::QKData{T1, N},
+    model::QKModel{T,T2}) where {T1 <: Real, T <: Real, T2 <: Real, N}
     @unpack T_bar, Y, M = data
-    @unpack N = model.state
     @unpack aug_mean, aug_cov = model.moments
     @unpack P = model.aug_state
-    Y_concrete = Vector{T1}(vec(Y))  # Convert to vector if it's not already
-    Y_t = @view Y_concrete[2:end]
+    
+    # Handle both vector and matrix Y inputs
+    Y_concrete = if N == 1
+        Vector{T1}(vec(Y))  # Convert to vector if it's not already
+    else
+        Y  # Keep as matrix for N == 2
+    end
+    Y_t = if N == 1
+        @view Y_concrete[1:end]
+    else
+        @view Y[:, 1:end]
+    end
 
     Z_tt = zeros(T, P, T_bar + 1)
     P_tt = zeros(T, P, P, T_bar + 1)
     Z_ttm1 = zeros(T, P, T_bar)
     P_ttm1 = zeros(T, P, P, T_bar)
     K_t = zeros(T, P, M, T_bar)
-    Y_ttm1 = zeros(T, T_bar)
+    Y_ttm1 = zeros(T, M, T_bar)
     M_ttm1 = zeros(T, M, M, T_bar)
     ll_t = zeros(T, T_bar)
 
@@ -1348,22 +1161,22 @@ function qkf_filter(data::QKData{T1, 1},
         Z_ttm1[:, t] = predict_Z_ttm1(Z_tt[:, t], model)
         P_ttm1[:, :, t] = predict_P_ttm1(P_tt[:, :, t], Z_tt[:, t], model, t)
 
-        Y_ttm1[t] = predict_Y_ttm1(Z_ttm1[:, t], Y, model, t)
+        Y_ttm1[:, t] = predict_Y_ttm1(Z_ttm1, Y_t, model, t)
         M_ttm1[:, :, t] = predict_M_ttm1(P_ttm1[:, :, t], model)
 
         K_t[:, :, t] = compute_K_t(P_ttm1[:, :, t], M_ttm1[:, :, t], model, t)
 
-        Z_tt[:, t + 1] = update_Z_tt(K_t[:, :, t], Y_t[t], Y_ttm1[t], Z_ttm1[:, t], t)
-        P_tt[:, :, t + 1] = update_P_tt(K_t[:, :, t], M_ttm1[:, :, t], P_ttm1[:, :, t], Z_ttm1[:, t], model, t)
+        # Handle different Y formats based on N
+        Z_tt[:, t + 1] = update_Z_tt(K_t, Y_t, Y_ttm1, Z_ttm1, t)
+        P_tt[:, :, t + 1] = update_P_tt(K_t[:, :, t], P_ttm1[:, :, t], Z_ttm1[:, t], model, t)
 
         Z_tt[:, t + 1] = correct_Z_tt(Z_tt[:, t + 1], model, t)
 
-        ll_t[t] = compute_loglik(Y_t[t], Y_ttm1[t], M_ttm1[:, :, t])
+        ll_t[t] = compute_loglik(Y_t, Y_ttm1, M_ttm1, t)
     end
 
     return FilterOutput(ll_t, Z_tt, P_tt, Y_ttm1, M_ttm1, K_t, Z_ttm1, P_ttm1)
 end
-
 
 """
     qkf_filter!(data::QKData{T1,1}, model::QKModel{T,T2})
@@ -1513,7 +1326,7 @@ function qkf_filter!(data::QKData{T, 2}, model::QKModel{T,T2}) where {T <: Real,
         K_t[:, :, t] = compute_K_t(P_ttm1[:, :, t], M_ttm1[:, :, t], model, t)
 
         Z_tt[:, t + 1] = update_Z_tt(K_t[:, :, t], Y[t], Y_ttm1[t], Z_ttm1[:, t], model, t)
-        P_tt[:, :, t + 1] = update_P_tt(K_t[:, :, t], M_ttm1[:, :, t], P_ttm1[:, :, t], Z_ttm1[:, t], model, t)
+        P_tt[:, :, t + 1] = update_P_tt(K_t[:, :, t], P_ttm1[:, :, t], Z_ttm1[:, t], model, t)
 
         Z_tt[:, t + 1] = correct_Z_tt(Z_tt[:, t + 1], model, t)
 
@@ -1524,6 +1337,5 @@ function qkf_filter!(data::QKData{T, 2}, model::QKModel{T,T2}) where {T <: Real,
         K_t = K_t, Z_ttm1 = Z_ttm1, P_ttm1 = P_ttm1)
 
 end
-
 
 export qkf_filter, qkf_filter!

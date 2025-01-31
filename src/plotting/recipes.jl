@@ -140,7 +140,6 @@ The plot uses consistent styling:
             subplot := i
             seriestype := :path
             linecolor --> :lightcoral
-            linestyle --> :dash
             label := "Kalman Filter $i"
             primary := true
             1:T, X_filter[i,:]
@@ -274,7 +273,9 @@ The plot uses consistent styling:
 """
 @recipe function f(kf::KalmanFilterPlot)
     results = kf.results
-    N = size(results.Z_tt, 1)
+    P = size(results.Z_tt, 1)
+    # Solve N² + N - P = 0 for N
+    N = Int((-1 + sqrt(1 + 4P))/2)
     T = size(results.Z_tt, 2)
     X_filter = results.Z_tt[1:N, :]
     P_filter = results.P_tt[1:N, 1:N, :]
@@ -339,7 +340,8 @@ The plot includes:
 """
 @recipe function f(ks::KalmanSmootherPlot)
     results = ks.results
-    N = size(results.Z_smooth, 1)
+    P = size(results.Z_smooth, 1)
+    N = Int((-1 + sqrt(1 + 4P))/2)
     T = size(results.Z_smooth, 2)
     X_smooth = results.Z_smooth[1:N, :]
     P_smooth = results.P_smooth[1:N, 1:N, :]

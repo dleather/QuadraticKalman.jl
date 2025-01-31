@@ -1,64 +1,55 @@
-# QuadraticKalman.jl
+---
+title: "QuadraticKalman.jl"
+format: 
+  gfm:
+    preview: true
+jupyter: julia-1.10
+---
 
-
-[![Build
-Status](https://github.com/dleather/QuadraticKalman.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/dleather/QuadraticKalman.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Build Status](https://github.com/dleather/QuadraticKalman.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/dleather/QuadraticKalman.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/dleather/QuadraticKalman.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/dleather/QuadraticKalman.jl)
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://dleather.github.io/QuadraticKalman.jl/dev/)
 
-A Julia package implementing Kalman filtering and smoothing for
-state-space models with quadratic measurement equations, based on the
-methodology developed in [Monfort et. al. (2013, Journal of
-Econometrics)](https://www.sciencedirect.com/science/article/abs/pii/S0304407615000123).
 
-The package implements filtering and smoothing for the following
-state-space model with Gaussian noise:
+A Julia package implementing Kalman filtering and smoothing for state-space models with quadratic measurement equations, based on the methodology developed in [Monfort et. al. (2013, Journal of Econometrics)](https://www.sciencedirect.com/science/article/abs/pii/S0304407615000123).
+
+The package implements filtering and smoothing for the following state-space model with Gaussian noise:
 
 State equation:
 
-$X_{t} = \mu + \Phi X_{t-1} + \Omega \epsilon_t$, where
-$\epsilon_t \sim \mathcal{N}(0, I)$
+$X_{t} = \mu + \Phi X_{t-1} + \Omega \epsilon_t$, where $\epsilon_t \sim \mathcal{N}(0, I)$
 
 Measurement equation:
 
-$Y_t = A + B X_t + \alpha Y_{t-1} + \sum_{i=1}^M X_t^\prime C_i X_t + D \eta_t$,
-where $\eta_t \sim \mathcal{N}(0, I)$
+$Y_t = A + B X_t + \alpha Y_{t-1} + \sum_{i=1}^M X_t^\prime C_i X_t + D \eta_t$, where $\eta_t \sim \mathcal{N}(0, I)$
 
 ![Quadratic Kalman Smoother Results](smoother_example.png)
 
 ## 📖 Documentation
-
 👉 **[Read the Docs](https://dleather.github.io/QuadraticKalman.jl/)**
 
-Check out the latest documentation for installation, API reference, and
-usage examples.
+Check out the latest documentation for installation, API reference, and usage examples.
 
 ## Features
 
 - Kalman filtering and smoothing for quadratic state-space models.
-- Extends original implementation by allowing for autoregressive
-  measurement equations.
-- Gradiant and hessian of negative log-likelihood computed using
-  automatic differentiation using ForwardDiff.jl.
+- Extends original implementation by allowing for autoregressive measurement equations.
+- Gradiant and hessian of negative log-likelihood computed using automatic differentiation using ForwardDiff.jl.
 - Visualization tools for filtered and smoothed states.
 - Efficient parameter-model conversion for optimization.
-- Automatically reparametrizes model parameters to ensure
-  positive-definiteness of covariance matrices in an unconstrained
-  parameter space.
+- Automatically reparametrizes model parameters to ensure positive-definiteness of covariance matrices in an unconstrained parameter space.
 - 8.8x faster than R code in the same example.
 - Numerically stable implementation.
 - TODO: Add support for state-dependent measurement noise.
 
 ## Installation
-
-``` julia
+```julia
 using Pkg
 Pkg.add("QuadraticKalman")
 ```
 
 ## Quick Start
-
-``` julia
+```julia
 using QuadraticKalman, Random, Plots, LinearAlgebra
 Random.seed!(2314)
 
@@ -103,10 +94,9 @@ hess = ForwardDiff.hessian(nll, params)
 
 ## Citations
 
-If you use this package in your research, please cite the original
-paper:
+If you use this package in your research, please cite the original paper:
 
-``` bibtex
+```bibtex
 @article{monfort2015quadratic,
   title = {A Quadratic Kalman Filter},
   journal = {Journal of Econometrics},
@@ -127,24 +117,23 @@ MIT License
 
 Copyright (c) 2025 David Leather
 
-Permission is hereby granted, free of charge, to any person obtaining a
-copy of this software and associated documentation files (the
-“Software”), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included
-in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS
-OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ## Contributing
 

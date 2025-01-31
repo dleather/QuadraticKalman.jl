@@ -1,6 +1,8 @@
 # API Reference
 
 ## Types
+
+### Main Types
 ```@docs
 QKData
 QKModel
@@ -9,25 +11,40 @@ FilterOutput
 SmootherOutput
 ```
 
-## Functions
+### Plotting Types
+```@docs
+KalmanFilterTruthPlot
+KalmanSmootherTruthPlot 
+KalmanFilterPlot
+KalmanSmootherPlot
+```
+
+
+## Functions    
+
+### Filtering and Smoothing
 ```@docs
 qkf_filter
 qkf_filter!
 qkf_smoother
 qkf_smoother!
 qkf
-get_measurement
 ```
+
+### Convenience Functions
+```@docs
+get_measurement
+qkf_negloglik
+model_to_params
+params_to_model
+```
+
 
 ## Plotting API
 
 ```@docs
-KalmanFilterTruthPlot
-KalmanSmootherTruthPlot
 kalman_filter_truth_plot
 kalman_smoother_truth_plot
-KalmanFilterPlot
-KalmanSmootherPlot
 kalman_filter_plot
 kalman_smoother_plot
 ```

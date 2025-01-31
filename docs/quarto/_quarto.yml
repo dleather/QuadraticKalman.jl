@@ -1,0 +1,48 @@
+project:
+  type: website
+  output-dir: ../_site
+  resources:
+    - "../src/assets"
+
+website:
+  title: "QuadraticKalman.jl"
+  navbar:
+    background: primary
+    search: true
+    left:
+      - text: "Home"
+        file: index.qmd
+      - text: "API"
+        file: api/_index.qmd
+      - text: "Examples"
+        file: examples/_index.qmd
+      - text: "Guides"
+        file: guides/_index.qmd
+    tools:
+      - icon: github
+        href: https://github.com/dleather/QuadraticKalman.jl
+
+  sidebar:
+    style: docked
+    contents:
+      - section: "API Reference"
+        contents:
+          - text: "Overview"
+            file: api/_index.qmd
+          - text: "Filter"
+            file: api/filter.qmd
+          - text: "Smoother"
+            file: api/smoother.qmd
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true
+    code-fold: show
+    code-tools: true
+    highlight-style: github
+
+execute:
+  freeze: auto
+  cache: true

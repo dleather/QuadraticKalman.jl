@@ -5,4 +5,5 @@
 /Manifest.toml
 /docs/build/
 scratch/
-r_code/
+README_files/
+!README.md

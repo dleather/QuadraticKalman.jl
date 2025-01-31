@@ -318,10 +318,10 @@ A `Vector{T}` of length `M`, computed via
 
 """
 function predict_Y_ttm1(
-    Z_ttm1::AbstractMatrix{T},
-    Y::AbstractMatrix{T},
+    Z_ttm1::AbstractMatrix{T1},
+    Y::AbstractMatrix{T3},
     model::QKModel{T,T2},
-    t::Int) where {T<:Real, T2<:Real}
+    t::Int) where {T<:Real, T1<:Real, T3<:Real, T2<:Real}
 
     @unpack A, alpha = model.meas
     @unpack B_aug = model.aug_state
@@ -669,11 +669,11 @@ A newly allocated vector of length `P`, computed via:
 
 """
 function update_Z_tt(
-    K_t::AbstractArray{T,3},
+    K_t::AbstractArray{T1,3},
     Y::AbstractVecOrMat{T},
-    Y_ttm1::AbstractMatrix{T},
-    Z_ttm1::AbstractMatrix{T},
-    t::Int) where {T<:Real}
+    Y_ttm1::AbstractMatrix{T1},
+    Z_ttm1::AbstractMatrix{T1},
+    t::Int) where {T<:Real, T1 <: Real}
 
     # Handle both vector and matrix Y inputs
     current_Y = Y isa AbstractVector ? Y[t+1] : Y[:, t+1]
@@ -764,11 +764,12 @@ given a predicted covariance `P_ttm1`, a Kalman gain `K_t`.
    you want a direct forward pass without in-place modifications.
 
 """
-function update_P_tt(K_t::AbstractMatrix{T5},
-    P_ttm1::AbstractMatrix{T3}, Z_ttm1::AbstractVector{T4}, model::QKModel{T,T2},
-    t::Int ) where {T<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real}
+function update_P_tt(K_t::AbstractMatrix{T1},
+    P_ttm1::AbstractMatrix{T1}, Z_ttm1::AbstractVector{T1}, model::QKModel{T3,T2},
+    t::Int ) where {T<:Real, T2<:Real, T3<:Real, T1 <: Real}
     @unpack V = model.meas
     @unpack B_aug = model.aug_state
+
 
 
     # 1) A = I - K_t*B_aug

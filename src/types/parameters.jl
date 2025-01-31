@@ -1,9 +1,9 @@
 @with_kw struct StateParams{T<:Real}
-    N::Int              # State dimension
-    mu::Vector{T}       # Drift vector
-    Phi::Matrix{T}      # Autoregressive matrix
-    Omega::Matrix{T}    # Noise scaling matrix
-    Sigma::Matrix{T}    # Covariance of state. Precomputed.
+    N::Int              
+    mu::AbstractVector{T}       
+    Phi::AbstractMatrix{T}      
+    Omega::AbstractMatrix{T}    
+    Sigma::AbstractMatrix{T}    
 end
 
 function StateParams(N::Int, mu::AbstractVector{T}, Phi::Union{AbstractMatrix{T}, UniformScaling}, 
@@ -32,13 +32,13 @@ end
 
 # Measurement equation parameters
 @with_kw struct MeasParams{T<:Real}
-    M::Int                                  # Observation dimension
-    A::Vector{T}                            # Constant term in observation equation
-    B::Matrix{T}                            # Linear observation matrix
-    C::Vector{Matrix{T}}                    # Quadratic observation matrices
-    D::Matrix{T}                            # Time-invariant observation noise scaling matrix
-    alpha::Matrix{T}                        # Autoregressive coefficients of measurement equation
-    V::Matrix{T}                            # Precomputed DD'
+    M::Int                                  
+    A::AbstractVector{T}                            
+    B::AbstractMatrix{T}                            
+    C::Vector{<:AbstractMatrix{T}}                    
+    D::AbstractMatrix{T}                            
+    alpha::AbstractMatrix{T}                        
+    V::AbstractMatrix{T}                            
 end
 
 function MeasParams(M::Int, N::Int, A::AbstractVector{T}, 
@@ -69,15 +69,15 @@ end
 
 # Augmented state parameters
 @with_kw struct AugStateParams{T<:Real, T2<:Real}
-    mu_aug::Vector{T}
-    Phi_aug::Matrix{T}
-    B_aug::Matrix{T}
-    H_aug::Matrix{T}
-    G_aug::Matrix{T}
-    Lambda::Matrix{T2}
-    L1::Matrix{T}
-    L2::Matrix{T}
-    L3::Matrix{T}
+    mu_aug::AbstractVector{T}
+    Phi_aug::AbstractMatrix{T}
+    B_aug::AbstractMatrix{T}
+    H_aug::AbstractMatrix{T}
+    G_aug::AbstractMatrix{T}
+    Lambda::AbstractMatrix{T2}
+    L1::AbstractMatrix{T}
+    L2::AbstractMatrix{T}
+    L3::AbstractMatrix{T}
     P::Int
 end
 
@@ -105,10 +105,10 @@ end
 
 # Unconditional moments
 @with_kw struct Moments{T<:Real}
-    state_mean::Vector{T}
-    state_cov::Matrix{T}
-    aug_mean::Vector{T}
-    aug_cov::Matrix{T}
+    state_mean::AbstractVector{T}
+    state_cov::AbstractMatrix{T}
+    aug_mean::AbstractVector{T}
+    aug_cov::AbstractMatrix{T}
 end
 
 function Moments(mu::AbstractVector{T}, Phi::AbstractMatrix{T}, Sigma::AbstractMatrix{T},
@@ -208,10 +208,10 @@ function QKModel(N::Int, M::Int, mu::AbstractVector{T}, Phi::AbstractMatrix{T},
                  C::Vector{<:AbstractMatrix{T}}, D::AbstractMatrix{T},
                  alpha::AbstractMatrix{T};
                  check_stability::Bool=false) where {T<:Real}
-        
-    # Construct sub-components
-    state = StateParams(N, mu, Phi, Omega; check_stability=check_stability)
-    meas = MeasParams(M, N, A, B, C, D, alpha)
+    
+    # Convert tracked arrays to regular arrays for internal storage
+    state = StateParams(N, collect(mu), collect(Phi), collect(Omega); check_stability=check_stability)
+    meas = MeasParams(M, N, collect(A), collect(B), [collect(Ci) for Ci in C], collect(D), collect(alpha))
     aug_state = AugStateParams(N, state.mu, state.Phi, state.Sigma, meas.B, meas.C)
     moments = Moments(state.mu, state.Phi, state.Sigma, aug_state.mu_aug, aug_state.Phi_aug,
                      aug_state.L1, aug_state.L2, aug_state.L3, aug_state.Lambda)
@@ -250,4 +250,239 @@ function QKModel(state::StateParams{T}, meas::MeasParams{T}; check_stability::Bo
     @unpack N, mu, Phi, Omega = state
     @unpack M, A, B, C, D, alpha = meas
     return QKModel(N, M, mu, Phi, Omega, A, B, C, D, alpha; check_stability=check_stability)
+end
+
+"""
+    params_to_model(params::Vector{T}, N::Int, M::Int) where T<:Real -> QKModel
+
+Convert a parameter vector into a QKModel object with state and measurement parameters.
+
+# Arguments
+- `params::Vector{T}`: A vector of unconstrained parameters.
+- `N::Int`: Dimension of the state vector.
+- `M::Int`: Dimension of the measurement vector.
+
+# Returns
+A `QKModel` object containing:
+- **State parameters:** (mu, Phi, Omega)  
+  where the state equation is
+      Xₜ = μ + Φ Xₜ₋₁ + Omega εₜ.
+  Here, Omega is constructed as Omega = D_state * D_state′,
+  with D_state a lower–triangular matrix (of size N×N) whose diagonal entries are positive.
+- **Measurement parameters:** (A, B, C, D, α)  
+  where the measurement equation is
+      Yₜ = A + B Xₜ + α Yₜ₋₁ + ∑₍ᵢ₌₁₎ᴹ Xₜ′ Cᵢ Xₜ + D εₜ.
+  Here, D is constructed as D = D_meas * D_meas′,
+  with D_meas a lower–triangular matrix (of size M×M) whose diagonal entries are positive.
+- Augmented state parameters and model moments (computed via helper functions).
+
+# Parameter vector layout
+
+The parameter vector is assumed to contain:
+
+1. **State parameters:**
+   - First `N` entries: state mean `mu`.
+   - Next `N^2` entries: entries of `Phi` (stored columnwise).
+   - Next `N(N+1)/2` entries: unconstrained parameters for D_state (used to form Omega).
+
+2. **Measurement parameters:**
+   - Next `M` entries: `A`.
+   - Next `M×N` entries: entries of `B` (reshaped as an M×N matrix).
+   - Next `M×N^2` entries: entries for `C`. (Interpreted as M matrices of size N×N.)
+   - Next `M(M+1)/2` entries: unconstrained parameters for D_meas (used to form D).
+   - Final `M×M` entries: entries of `α` (reshaped as an M×M matrix).
+
+# Total expected length:
+
+    N + N^2 + N(N+1)/2  +  M + M×N + M×N^2 + M(M+1)/2 + M^2
+
+"""
+function params_to_model(params::AbstractVector{T}, N::Int, M::Int) where T<:Real
+    # Convert tracked arrays to regular arrays for internal computations
+    params_array = collect(params)
+    
+    # Compute the number of parameters in each block.
+    n_mu    = N
+    n_Phi   = N^2
+    n_Dstate = div(N*(N+1), 2)      # for lower-triangular D_state
+
+    n_A     = M
+    n_B     = M * N
+    n_C     = M * N^2           # interpreted as M matrices (each N×N)
+    n_Dmeas = div(M*(M+1), 2)       # for lower-triangular D_meas
+    n_alpha = M^2
+
+    n_state = n_mu + n_Phi + n_Dstate
+    n_meas  = n_A + n_B + n_C + n_Dmeas + n_alpha
+    expected_length = n_state + n_meas
+
+    @assert length(params_array) == expected_length "Parameter vector has unexpected length: got $(length(params_array)), expected $expected_length"
+
+    # Extract state parameters
+    ndx = 1
+
+    # 1. State mean: mu (length N)
+    mu = params_array[ndx : ndx + n_mu - 1]
+    ndx += n_mu
+
+    # 2. State transition matrix: Phi (N×N, stored columnwise)
+    Phi = reshape(params_array[ndx : ndx + n_Phi - 1], (N, N))
+    ndx += n_Phi
+
+    # 3. State noise parameters: Build D_state (lower-triangular) from n_Dstate unconstrained parameters.
+    Omega_params = params_array[ndx : ndx + n_Dstate - 1]
+    ndx += n_Dstate
+
+    Omega = zeros(T, N, N)
+    k = 1
+    for i in 1:N
+        for j in 1:i
+            if i == j
+                Omega[i, j] = exp(Omega_params[k])  # exponentiate diagonal entries to ensure positivity.
+            else
+                Omega[i, j] = Omega_params[k]
+            end
+            k += 1
+        end
+    end
+
+    # =====================
+    # Extract measurement parameters
+    # =====================
+
+    # 4. Measurement intercept: A (length M)
+    A = params_array[ndx : ndx + n_A - 1]
+    ndx += n_A
+
+    # 5. Measurement loading matrix: B (reshape as M×N)
+    B = reshape(params_array[ndx : ndx + n_B - 1], (M, N))
+    ndx += n_B
+
+    # 6. Quadratic term parameters: C.
+    C_entries = params_array[ndx : ndx + n_C - 1]
+    ndx += n_C
+    C = Vector{Matrix{T}}(undef, M)
+    for i in 1:M
+        C[i] = reshape(C_entries[(i-1)*N^2 + 1 : i*N^2], (N, N))
+    end
+
+    # 7. Measurement noise parameters: Build D_meas (lower-triangular) from n_Dmeas unconstrained parameters.
+    D_params = params_array[ndx : ndx + n_Dmeas - 1]
+    ndx += n_Dmeas
+
+    D = zeros(T, M, M)
+    k = 1
+    for i in 1:M
+        for j in 1:i
+            if i == j
+                D[i, j] = exp(D_params[k])
+            else
+                D[i, j] = D_params[k]
+            end
+            k += 1
+        end
+    end
+
+    # 8. Measurement noise auto-regressive parameter: α (reshape as M×M)
+    alpha = reshape(params_array[ndx : ndx + n_alpha - 1], (M, M))
+    ndx += n_alpha
+    @assert ndx == expected_length + 1 "ndx should be equal to expected_length + 1"
+
+    # Convert back to tracked arrays for the final QKModel construction
+    return QKModel(N, M, mu, Phi, Omega, A, B, C, D, alpha)
+end
+
+"""
+    model_to_params(model::QKModel{T, T2}) where {T<:Real, T2}
+
+Convert a QKModel object into a vector of unconstrained parameters.
+
+The ordering of the parameters is as follows:
+
+1. **State parameters:**
+   - `mu` (length N)
+   - `Phi` (N×N, stored columnwise)
+   - Unconstrained parameters for the state noise scaling factor Ω:
+     For each row `i = 1,...,N` and column `j = 1,...,i` (i.e. the lower–triangular part):
+       - If `i == j`: the parameter is `log(Ω[i,i])`
+       - Else: the parameter is `Ω[i,j]`
+
+2. **Measurement parameters:**
+   - `A` (length M)
+   - `B` (M×N, stored columnwise)
+   - `C` (a vector of M matrices; each matrix is N×N and is flattened columnwise)
+   - Unconstrained parameters for the measurement noise scaling factor D:
+     For each row `i = 1,...,M` and column `j = 1,...,i`:
+       - If `i == j`: the parameter is `log(D[i,i])`
+       - Else: the parameter is `D[i,j]`
+   - `alpha` (M×M, stored columnwise)
+
+# Returns
+A vector of unconstrained parameters that, when passed to `params_to_model`, reconstructs the original QKModel.
+"""
+function model_to_params(model::QKModel{T, T2}) where {T<:Real, T2}
+  # Extract the dimensions from the model.
+  N = model.state.N
+  M = model.meas.M
+
+  # Initialize an empty vector to accumulate the parameters.
+  params = Vector{T}()
+
+  # --------------------------------------------------
+  # 1. State parameters
+  # --------------------------------------------------
+  # a. State mean: mu
+  append!(params, model.state.mu)
+
+  # b. State transition matrix: Phi (flattened columnwise)
+  append!(params, vec(model.state.Phi))
+
+  # c. Unconstrained parameters for the state noise scaling factor, Ω.
+  #    For each (i,j) in the lower–triangular part of Ω:
+  #      - if i == j, then parameter = log(Ω[i,i])
+  #      - otherwise, parameter = Ω[i,j]
+  for i in 1:N
+    for j in 1:i
+      if i == j
+        push!(params, log(model.state.Omega[i, j]))
+      else
+        push!(params, model.state.Omega[i, j])
+      end
+    end
+  end
+
+  # --------------------------------------------------
+  # 2. Measurement parameters
+  # --------------------------------------------------
+  # a. Measurement intercept: A
+  append!(params, model.meas.A)
+
+  # b. Measurement loading matrix: B (flattened columnwise)
+  append!(params, vec(model.meas.B))
+
+  # c. Quadratic term parameters: C
+  #    C is stored as a vector of M matrices (each of size N×N).
+  #    For each matrix, flatten it columnwise and append.
+  for i in 1:M
+    append!(params, vec(model.meas.C[i]))
+  end
+
+  # d. Unconstrained parameters for the measurement noise scaling factor, D.
+  #    For each (i,j) in the lower–triangular part of D:
+  #      - if i == j, then parameter = log(D[i,i])
+  #      - otherwise, parameter = D[i,j]
+  for i in 1:M
+    for j in 1:i
+      if i == j
+        push!(params, log(model.meas.D[i, j]))
+      else
+        push!(params, model.meas.D[i, j])
+      end
+    end
+  end
+
+  # e. Measurement noise auto–regressive parameter: alpha (flattened columnwise)
+  append!(params, vec(model.meas.alpha))
+
+  return params
 end

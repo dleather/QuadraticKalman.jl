@@ -99,7 +99,7 @@ The log-likelihood `Float64` (or `T`) computed using `log_pdf_normal(μ, σ², x
 4. If `sigma2` is <= 0, clamps it to a tiny positive `1e-12` to avoid domain error.
 5. Calls `log_pdf_normal(mu, sigma2, x)` and returns the result.
 """
-function compute_loglik(Y::Real, Ypred::Real, Mpred::AbstractArray{T}) where {T<:Real}
+function compute_loglik(Y::Real, Ypred::T, Mpred::AbstractArray{T}) where {T<:Real}
     @assert size(Mpred,1) == 1 && size(Mpred,2) == 1 "Expected Mpred to be 1x1 for univariate"
 
     sigma2 = Mpred[1,1]
@@ -172,8 +172,8 @@ A real scalar `::Real` representing:
   will error. In a robust filter, you might ensure PSD by correction steps.
 
 """
-function logpdf_mvn(Y_pred::AbstractArray{T}, Sigma_pred::AbstractArray{<:Real},
-                    Y::AbstractArray{T}, t::Int) where T <: Real
+function logpdf_mvn(Y_pred::AbstractArray{T1}, Sigma_pred::AbstractArray{T1},
+                    Y::AbstractArray{T}, t::Int) where {T <: Real, T1 <: Real}
 
     # 1) Take views for mu, Sigma, x
     mu = @view Y_pred[:, t]
@@ -266,10 +266,44 @@ for each time step. Otherwise, for a typical filter, the in-place version
 `compute_loglik!` is often used inside a loop to fill a preallocated vector.
 """
 function compute_loglik(data::AbstractArray{T}, 
-                        mean::AbstractArray{T}, 
-                        covs::AbstractArray{<:Real}, 
-                        t::Int) where {T <: Real}
+                        mean::AbstractArray{T1}, 
+                        covs::AbstractArray{T1}, 
+                        t::Int) where {T <: Real, T1 <: Real}
     @assert t <= size(data,2) && t <= size(mean,2) && t <= size(covs,3) "Time index t out of range"
 
     return logpdf_mvn(mean, covs, data, t)
+end
+
+
+"""
+    qkf_negloglik(params::Vector{T}, data::QKData, N::Int, M::Int) where T<:Real -> Real
+
+
+Compute the negative log-likelihood for a Quadratic Kalman Filter model given parameters and data.
+
+# Arguments
+- `params::Vector{T}`: Vector of model parameters to be converted into a QKModel
+- `data::QKData`: Data container with observations and optional initial conditions
+- `N::Int`: Dimension of the state vector
+- `M::Int`: Dimension of the measurement vector
+
+# Returns
+The negative log-likelihood value computed by:
+1. Converting parameters to a QKModel
+2. Running the Kalman filter
+3. Taking the negative sum of the per-period log-likelihoods
+
+# Note
+This function is typically used as an objective function for maximum likelihood estimation,
+where the goal is to minimize the negative log-likelihood.
+
+For optimization, you may want to wrap this function with N, M and data specified:
+
+    `negloglik(params) = qkf_negloglik(params, data, N, M)`
+
+"""
+function qkf_negloglik(params::AbstractVector{T}, data::QKData, N::Int, M::Int) where T<:Real
+    model = params_to_model(params, N, M)
+    result = qkf_filter(data, model)
+    return -sum(result.ll_t)
 end

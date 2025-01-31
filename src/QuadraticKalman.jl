@@ -69,5 +69,6 @@ export get_measurement                                              # Convenienc
 export kalman_filter_truth_plot, kalman_smoother_truth_plot, kalman_filter_plot
 export kalman_smoother_plot, KalmanFilterPlot, KalmanSmootherPlot
 export KalmanFilterTruthPlot, KalmanSmootherTruthPlot
+export params_to_model, qkf_negloglik, model_to_params
 
 end # module

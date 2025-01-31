@@ -1,7 +1,6 @@
 using Test
 import QuadraticKalman as QK
 using LinearAlgebra, Random, Plots, Random
-using GR
 gr()
 
 @testset "Plot Recipes" begin

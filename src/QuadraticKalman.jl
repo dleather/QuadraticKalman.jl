@@ -67,6 +67,7 @@ export QKData, QKModel, QKFOutput, FilterOutput, SmootherOutput     # Types
 export qkf_filter, qkf_filter!, qkf_smoother, qkf_smoother!, qkf    # Functions
 export get_measurement                                              # Convenience function
 export kalman_filter_truth_plot, kalman_smoother_truth_plot, kalman_filter_plot
-export kalman_smoother_plot
+export kalman_smoother_plot, KalmanFilterPlot, KalmanSmootherPlot
+export KalmanFilterTruthPlot, KalmanSmootherTruthPlot
 
 end # module

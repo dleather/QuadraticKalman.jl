@@ -24,6 +24,10 @@ get_measurement
 ```@docs
 KalmanFilterTruthPlot
 KalmanSmootherTruthPlot
-kalman_filter_truthplot
-kalman_smoother_truthplot
+kalman_filter_truth_plot
+kalman_smoother_truth_plot
+KalmanFilterPlot
+KalmanSmootherPlot
+kalman_filter_plot
+kalman_smoother_plot
 ```

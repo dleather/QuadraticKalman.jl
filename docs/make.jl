@@ -7,6 +7,7 @@ makedocs(
     modules = [QuadraticKalman],
     pages = [
         "Home" => "index.md",
+        "Plotting Guide" => "plots.md",
         "API Reference" => "api.md",
         "Examples" => "examples.md"
     ],

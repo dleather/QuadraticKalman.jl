@@ -1,6 +1,6 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.4"
+julia_version = "1.10.8"
 manifest_format = "2.0"
 project_hash = "7b2541db23dbde3400c1372613aad4ba2245abd8"
 
@@ -939,7 +939,7 @@ uuid = "e99dba38-086e-5de3-a5b1-6e4c66e897c3"
 version = "6.7.1+1"
 
 [[deps.QuadraticKalman]]
-deps = ["DifferentiableEigen", "ForwardDiff", "LinearAlgebra", "LogExpFunctions", "Parameters", "Preferences", "Random", "ReverseDiff", "SparseArrays", "SpecialFunctions", "Zygote"]
+deps = ["DifferentiableEigen", "ForwardDiff", "LinearAlgebra", "LogExpFunctions", "Parameters", "Preferences", "Random", "RecipesBase", "ReverseDiff", "SparseArrays", "SpecialFunctions", "Zygote"]
 path = "C:\\Users\\davle\\Dropbox (Personal)\\QuadraticKalman.jl"
 uuid = "03de00d5-86b5-48ba-885c-e25084f99d9a"
 version = "1.0.0-DEV"
@@ -1467,7 +1467,7 @@ version = "0.15.2+0"
 [[deps.libblastrampoline_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
-version = "5.8.0+1"
+version = "5.11.0+0"
 
 [[deps.libdecor_jll]]
 deps = ["Artifacts", "Dbus_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "Pango_jll", "Wayland_jll", "xkbcommon_jll"]

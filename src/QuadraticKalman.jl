@@ -1,7 +1,7 @@
 module QuadraticKalman
 
 using LinearAlgebra, Parameters, SpecialFunctions, Zygote, DifferentiableEigen, 
-    LogExpFunctions, SparseArrays, Random
+    LogExpFunctions, SparseArrays, Random, RecipesBase, Plots
 
 #=
 Original Model Specification:
@@ -59,10 +59,14 @@ include("core/likelihood.jl")
 include("core/filter.jl")
 include("core/smoother.jl")
 
+# Import recipes
+include("plotting/recipes.jl")
+
 # Export public types and functions
 export QKData, QKModel, QKFOutput, FilterOutput, SmootherOutput     # Types
 export qkf_filter, qkf_filter!, qkf_smoother, qkf_smoother!, qkf    # Functions
 export get_measurement                                              # Convenience function
-
+export kalman_filter_truth_plot, kalman_smoother_truth_plot, kalman_filter_plot
+export kalman_smoother_plot
 
 end # module

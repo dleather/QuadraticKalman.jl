@@ -3,7 +3,7 @@ import QuadraticKalman as QK
 using LinearAlgebra, Random
 using CSV, DataFrames
 using RData, JSON
-using Aqua
+using Aqua, Plots
 @testset "QuadraticKalman.jl" begin
     @testset "Code quality (Aqua.jl)" begin
         Aqua.test_all(QK)
@@ -14,6 +14,7 @@ using Aqua
     include("test_augmented_moments_and_likelihood.jl")
     include("test_core_filter.jl")
     include("test_core_smoother.jl")
+    include("test_plots.jl")
     #include("test_end_to_end.jl")
     try
         include("test_r_comparison.jl")  # If you have R-based comparisons

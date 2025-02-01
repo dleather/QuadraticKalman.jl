@@ -13,7 +13,7 @@ makedocs(
         analytics = "UA-XXXXXXXXX-X"
     ),
     modules = [QuadraticKalman],
-    strict = false,
+    checkdocs = :exports,  # Only check for docstrings in exported functions
     pages = [
         "Home" => "index.md",
         "API Reference" => "api.md",

@@ -1,7 +1,4 @@
 [deps]
-Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 FiniteDiff = "6a86dc24-6348-571c-b903-95158fe2bd41"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 QuadraticKalman = "03de00d5-86b5-48ba-885c-e25084f99d9a"
-ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
-Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"

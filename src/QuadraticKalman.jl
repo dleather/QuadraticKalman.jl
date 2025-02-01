@@ -1,6 +1,6 @@
 module QuadraticKalman
 
-using LinearAlgebra, Parameters, SpecialFunctions, Zygote, DifferentiableEigen, 
+using LinearAlgebra, Parameters, SpecialFunctions, DifferentiableEigen, 
     LogExpFunctions, SparseArrays, Random, RecipesBase, Plots
 
 #=

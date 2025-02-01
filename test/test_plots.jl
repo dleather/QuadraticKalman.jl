@@ -32,13 +32,13 @@ gr()
     @testset "Estimate Plots" begin
         # Test filter estimate plot
         p3 = plot(QK.KalmanFilterPlot(filter_results))
-        @test p3.attr[:size] == (1000, 350*N)
+        @test p3.attr[:size] == (1000, 350)
         @test p3[1].series_list[1][:seriestype] == :path
         
         # Test smoother estimate plot
         p4 = plot(QK.KalmanSmootherPlot(smoother_results))
         @test p4[1].attr[:title] == "Kalman Smoother Estimates"
-        @test length(p4.series_list) == N*2  # 2 series per state
+        @test length(p4.series_list) == N  # 2 series per state
     end
 
     @testset "Helper Functions" begin

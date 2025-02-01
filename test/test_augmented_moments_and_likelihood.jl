@@ -118,10 +118,11 @@ using LinearAlgebra, Random
             # log-likelihood => -0.5*(2*log(2π) + 0.0) = -log(2π)
             Y2 = [0.0 0.0; 0.0 0.0]
             Y2_pred = [0.0 0.0; 0.0 0.0]
-            M2pred = Matrix(I, 2, 2)  # 2×2 identity
+            M2pred = 1.0 * Matrix(I, 2, 2)  # 2×2 identity
             # Using the time-indexed version: compute_loglik(data, mean, cov, t)
             # or the simpler form compute_loglik(Y2, Y2_pred, M2pred).
             # We'll assume a function signature like:
+
             ll2 = QK.compute_loglik(Y2, Y2_pred, M2pred, 1) 
             # or if you have a "no-index" version:
             # ll2 = compute_loglik(Y2, Y2_pred, M2pred)

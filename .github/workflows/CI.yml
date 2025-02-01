@@ -16,6 +16,7 @@ jobs:
         version:
           - '1.10'    # LTS version
           - '1.10.8' # Your current version
+          - '11.3'   # Added to test Julia version 11.3
         os:
           - ubuntu-latest
           - macOS-latest

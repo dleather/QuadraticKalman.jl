@@ -1,7 +1,7 @@
 module QuadraticKalman
 
 using LinearAlgebra, Parameters, SpecialFunctions, DifferentiableEigen, 
-    LogExpFunctions, SparseArrays, Random, RecipesBase, Plots
+    LogExpFunctions, SparseArrays, Random, RecipesBase
 
 #=
 Original Model Specification:

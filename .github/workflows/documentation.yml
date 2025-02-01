@@ -24,7 +24,7 @@ jobs:
       - name: Setup Julia
         uses: julia-actions/setup-julia@v1
         with:
-          version: '1.10'
+          version: '1.10.8'
 
       - name: Install dependencies
         run: |
@@ -32,6 +32,12 @@ jobs:
             using Pkg
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
+
+      - name: Cache Julia packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.julia
+          key: ${{ runner.os }}-${{ matrix.julia-version }}-${{ hashFiles('**/Project.toml') }}
 
       - name: Build Documenter.jl docs
         run: |

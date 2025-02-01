@@ -25,6 +25,8 @@ makedocs(
 if get(ENV, "CI", nothing) == "true"
     deploydocs(
         repo = "github.com/dleather/QuadraticKalman.jl.git",
+        devbranch = "main",
+        devurl = "dev",
         target = BUILD_DIR,
         push_preview = true
     )

@@ -13,6 +13,7 @@ makedocs(
         analytics = "UA-XXXXXXXXX-X"
     ),
     modules = [QuadraticKalman],
+    strict = false,
     pages = [
         "Home" => "index.md",
         "API Reference" => "api.md",

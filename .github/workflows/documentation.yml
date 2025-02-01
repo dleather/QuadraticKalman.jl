@@ -30,8 +30,9 @@ jobs:
         run: |
           julia --project=docs -e '
             using Pkg
-            Pkg.develop(PackageSpec(path=pwd()))
-            Pkg.instantiate()'
+            Pkg.instantiate()  # First install docs deps
+            Pkg.develop(PackageSpec(path=pwd()))  # Then add main package
+          '
 
       - name: Cache Julia packages
         uses: actions/cache@v3

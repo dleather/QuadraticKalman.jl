@@ -24,7 +24,7 @@ jobs:
       - name: Setup Julia
         uses: julia-actions/setup-julia@v1
         with:
-          version: '1.10.8'
+          version: '1.11.3'
 
       - name: Install dependencies
         run: |

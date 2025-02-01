@@ -376,6 +376,7 @@ The plot includes:
     layout := (N, 1)
     size --> (1000, 350*N)
     legend := :bottom
+    legendcolumn := 2
     gridalpha --> 0.3
     
     # Create series for each state

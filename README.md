@@ -21,7 +21,7 @@ $\epsilon_t \sim \mathcal{N}(0, I)$
 
 Measurement equation:
 
-$Y_t = A + B X_t + \alpha Y_{t-1} + \sum_{i=1}^M X_t^\prime C_i X_t + D \eta_t$,
+$Y_t = A + B X_t + \alpha Y_{t-1} + \sum_{i=1}^M e_i X_t^\prime C_i X_t + D \eta_t$,
 where $\eta_t \sim \mathcal{N}(0, I)$
 
 ![Quadratic Kalman Smoother Results](smoother_example.png)

@@ -905,12 +905,13 @@ vector `Zₜ` includes not only the usual mean component `xₜ` but also
 terms for the second-moment `(x xᵀ)ₜ`, making it a *quadratic* extension. 
 At each time step, it performs:
 
-1. **State Prediction** (`predict_Zₜₜ₋₁!` / `predict_Pₜₜ₋₁!`)
-2. **Measurement Prediction** (`predict_Yₜₜ₋₁!` / `predict_Mₜₜ₋₁!`)
-3. **Kalman Gain Computation** (`compute_Kₜ!`)
-4. **State & Covariance Update** (`update_Zₜₜ!`, `update_Pₜₜ!`)
-5. **PSD Correction** (`correct_Zₜₜ!`)
+1. **State Prediction** (`predict_Z_ttm1!` / `predict_P_ttm1!`)
+2. **Measurement Prediction** (`predict_Y_ttm1!` / `predict_M_ttm1!`)
+3. **Kalman Gain Computation** (`compute_K_t!`)
+4. **State & Covariance Update** (`update_Z_tt!`, `update_P_tt!`)
+5. **PSD Correction** (`correct_Z_tt!`)
 6. **Log-Likelihood** computation for the current innovation.
+
 
 Unlike the non-mutating version (`qkf_filter`), this function reuses 
 and mutates internal arrays and data structures in-place, which can 
@@ -964,11 +965,11 @@ A named tuple with fields:
 # Details
 
 1. **Initialization**: 
-   - `Zₜₜ[:, 1] .= μ̃ᵘ` and `Pₜₜ[:,:,1] .= Σ̃ᵘ`.
+   - `Z_tt[:, 1] .= μ̃ᵘ` and `P_tt[:,:,1] .= Σ̃ᵘ`.
 2. **Recursive Steps** (`for t in 1:T̄`):
-   - **Prediction**: `predict_Zₜₜ₋₁!` / `predict_Pₜₜ₋₁!`.
-   - **Measurement**: `predict_Yₜₜ₋₁!` / `predict_Mₜₜ₋₁!`.
-   - **Gain & Update**: `compute_K_t!`, then `update_Zₜₜ!` / `update_Pₜₜ!`.
+   - **Prediction**: `predict_Z_ttm1!` / `predict_P_ttm1!`.
+   - **Measurement**: `predict_Y_ttm1!` / `predict_M_ttm1!`.
+   - **Gain & Update**: `compute_K_t!`, then `update_Z_tt!` / `update_P_tt!`. 
    - **Correction**: `correct_Z_tt!` clamps negative eigenvalues 
      for PSD.
    - **Likelihood**: `compute_loglik!` appends the log-likelihood.
@@ -1125,7 +1126,7 @@ result = qkf_filter(data, model)
 
 @show result.ll_t
 @show result.Z_tt[:, end]   # final state
-'''
+```
 """
 function qkf_filter(data::QKData{T1, N},
     model::QKModel{T,T2}) where {T1 <: Real, T <: Real, T2 <: Real, N}

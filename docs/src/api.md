@@ -6,10 +6,15 @@
 ```@docs
 QKData
 QKModel
+StateParams
+MeasParams
+Moments
+AugStateParams
 QKFOutput
 FilterOutput
 SmootherOutput
 ```
+
 
 ### Plotting Types
 ```@docs

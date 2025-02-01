@@ -299,8 +299,9 @@ where the goal is to minimize the negative log-likelihood.
 
 For optimization, you may want to wrap this function with N, M and data specified:
 
-    `negloglik(params) = qkf_negloglik(params, data, N, M)`
-
+```julia
+negloglik(params) = qkf_negloglik(params, data, N, M)
+```
 """
 function qkf_negloglik(params::AbstractVector{T}, data::QKData, N::Int, M::Int) where T<:Real
     model = params_to_model(params, N, M)

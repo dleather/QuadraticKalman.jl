@@ -122,12 +122,13 @@ the smoothed results. This is often simpler for AD frameworks that do not allow 
 mutation of arrays.
 
 # Returns
-- `Z_smooth::Matrix{T}`: (P × (T̄+1)) smoothed states
-- `P_smooth::Array{T,3}`: (P × P × (T̄+1)) smoothed covariances
+- `Z_smooth::Matrix{T}`: (P × (T_bar+1)) smoothed states
+- `P_smooth::Array{T,3}`: (P × P × (T_bar+1)) smoothed covariances
+
 
 # Example
-```
-Z_smooth, P_smooth = qkf_smoother(Z, P, Z_pred, P_pred, T̄, Hn, Gn, H̃, Φ̃, n)
+```julia
+Z_smooth, P_smooth = qkf_smoother(Z, P, Z_pred, P_pred, T_bar, Hn, Gn, H_aug, Φ_aug, n)
 ```
 """ 
 function qkf_smoother(Z::AbstractMatrix{T}, P::AbstractArray{T,3},
@@ -152,28 +153,82 @@ end
 """
     qkf_smoother!(filter_output::FilterOutput{T}, model::QKModel{T,T2}) where {T<:Real, T2<:Real}
 
-In-place backward smoothing for the QKF using filter outputs.
+Performs in-place backward smoothing for a Quadratic Kalman Filter (QKF) using the outputs obtained during filtering.
+
+This function refines the filtered state estimates and covariance matrices by incorporating future observations,
+thereby producing a set of smoothed estimates. It operates by first extracting the filtered states (Z_tt) and their
+associated covariances (P_tt), as well as the one-step-ahead predictions (Z_ttm1 and P_ttm1) from the given
+FilterOutput structure. It then unpacks the augmented state parameters (H_aug, G_aug, Phi_aug) along with the
+state dimension (N) from the QKModel. The function makes local copies of the filtered estimates to avoid any
+modification of the original filtering results, and then calls the lower-level in-place smoothing routine to
+update these copies using the one-step-ahead predictions and the model parameters. The smoothed states and
+covariances are finally encapsulated into a SmootherOutput structure, which is returned.
+
+Parameters:
+  - filter_output: A FilterOutput instance containing:
+      • Z_tt    :: Matrix of filtered augmented state estimates for time steps 0 to T̄.
+      • P_tt    :: Array of filtered state covariance matrices.
+      • Z_ttm1  :: Matrix of one-step-ahead predicted augmented states.
+      • P_ttm1  :: Array of one-step-ahead predicted covariance matrices.
+  - model: A QKModel instance providing the necessary model parameters for smoothing, including:
+      • aug_state: A structure containing:
+          - H_aug  :: The augmented measurement selection matrix.
+          - G_aug  :: The augmented duplication matrix for handling quadratic forms.
+          - Phi_aug:: The augmented state transition matrix.
+      • state: The dimension (N) of the state vector.
+
+Returns:
+  - A SmootherOutput structure containing:
+      • Z_smooth :: Matrix of smoothed augmented state estimates.
+      • P_smooth :: Array of smoothed state covariance matrices.
 """
 function qkf_smoother!(filter_output::FilterOutput{T}, model::QKModel{T,T2}) where {T<:Real, T2<:Real}
     @unpack Z_tt, P_tt, Z_ttm1, P_ttm1 = filter_output
     @unpack H_aug, G_aug, Phi_aug = model.aug_state
+    @unpack N = model.state
     T_bar = size(Z_tt, 2) - 1
     
-
     # Make copies to store smoothed results
     Z_smooth = copy(Z_tt)
     P_smooth = copy(P_tt)
     
-    # Call original smoother implementation
+    # Call original smoother implementation using one-step-ahead predictions
     qkf_smoother!(Z_smooth, P_smooth, Z_ttm1, P_ttm1, T_bar, G_aug, H_aug, Phi_aug, N)
     
     return SmootherOutput(Z_smooth, P_smooth)
 end
 
 """
-    qkf_smoother(filter_output::FilterOutput{T}, params::QKParams{T,T2}) where {T<:Real, T2<:Real}
+    qkf_smoother(filter_output::FilterOutput{T}, model::QKModel{T,T2}) where {T<:Real, T2<:Real}
 
-Out-of-place backward smoothing for the QKF using filter outputs.
+Performs out-of-place backward smoothing for the Quadratic Kalman Filter (QKF) using filtering outputs.
+This function refines the state estimates produced during filtering by incorporating future observations
+through a backward smoothing pass.
+
+# Arguments
+- filter_output::FilterOutput{T}: A container holding the outputs from the filtering phase, including:
+    • Z_tt: A matrix of filtered augmented state estimates.
+    • P_tt: An array of filtered state covariances.
+    • Z_ttm1: A matrix containing the one-step-ahead predicted states.
+    • P_ttm1: An array containing the one-step-ahead predicted state covariances.
+- model::QKModel{T,T2}: A model specification that provides the necessary parameters for the smoothing process.
+  The model includes an `aug_state` field which is unpacked to retrieve:
+    • H_aug: The augmented measurement selection matrix.
+    • G_aug: The augmented duplication matrix used for handling quadratic forms.
+    • Phi_aug: The augmented state transition matrix.
+  Additionally, the `state` field is used to extract the dimensionality (N) of the state.
+
+# Details
+This function first creates copies of the filtered state and covariance estimates to prevent modification
+of the original filtering outputs. It then invokes the in-place smoother routine (`qkf_smoother!`)
+on these copies using the one-step-ahead predicted values and the model's parameters. The final smoothed
+results are wrapped in a `SmootherOutput` struct and returned as fresh copies, which is particularly important
+for compatibility with automatic differentiation (AD) workflows.
+
+# Returns
+- SmootherOutput: A composite structure containing:
+    • Z_smooth: A matrix of smoothed augmented state estimates.
+    • P_smooth: An array of smoothed state covariance matrices.
 """
 function qkf_smoother(filter_output::FilterOutput{T},
     model::QKModel{T,T2}) where {T<:Real, T2<:Real}
@@ -183,22 +238,43 @@ function qkf_smoother(filter_output::FilterOutput{T},
     @unpack N = model.state
     T_bar = size(Z_tt, 2) - 1
 
-    # Make copies for the smoothed results
+    # Create copies for the smoothed results to preserve the original filtering output
     Z_smooth = copy(Z_tt)
     P_smooth = copy(P_tt)
     
-    # Call in-place version on copies
+    # Perform the in-place smoothing using one-step-ahead predictions and model parameters
     qkf_smoother!(Z_smooth, P_smooth, Z_ttm1, P_ttm1, T_bar, H_aug, G_aug, Phi_aug)
     
-    # Return fresh copies for AD
+    # Return new copies of the smoothed outputs to ensure compatibility with AD workflows
     return SmootherOutput(copy(Z_smooth), copy(P_smooth))
 end
 
 # Main interface function that returns combined results
 """
-    qkf(data::QKData{T1,N}, params::QKParams{T,T2}) where {T1,T,T2,N}
+    qkf(model::QKModel{T,T2}, data::QKData{T1,N}) where {T1<:Real, T<:Real, T2<:Real, N}
 
-Run both QKF filter and smoother, returning combined results.
+Execute the full Quadratic Kalman Filter (QKF) process by combining both the filtering and backward smoothing stages.
+This function first applies the filtering routine to generate real-time state estimates and then refines these estimates
+using the smoother to incorporate information from future observations. The resulting output is a composite object that 
+encapsulates both the filtered and smoothed results.
+
+Parameters:
+  - model::QKModel{T,T2}: A model specification that includes the system dynamics, state transition parameters,
+    and the augmented state representation. This object provides all necessary configurations to perform the QKF.
+  - data::QKData{T1,N}: A data container comprising the observed time series measurements, formatted appropriately
+    for the QKF. The parameter N indicates the dimension of the state vector, and T1 denotes the numerical type of the data.
+
+Process:
+  1. Filtering Stage: The function invokes qkf_filter with the provided data and model to compute the filtered state
+     estimates and error covariances.
+  2. Smoothing Stage: It then calls qkf_smoother to perform backward smoothing on the filtered results, enhancing the 
+     state estimates by leveraging future information.
+
+Returns:
+  - QKFOutput{T}: A composite output object that bundles both filtering and smoothing results. This output includes:
+      • filter_output: The results from the filtering phase, containing state estimates and covariances.
+      • smoother_output: The refined state estimates obtained after applying the smoother.
+  This combined output is useful for subsequent analysis, diagnostics, and visualization of the QKF performance.
 """
 function qkf(model::QKModel{T,T2}, data::QKData{T1,N}) where {T1<:Real, T<:Real, T2<:Real, N}
     # Run filter
@@ -215,7 +291,24 @@ end
 """
     qkf(data::QKData{T1,N}, model::QKModel{T,T2}) where {T1<:Real, T<:Real, T2<:Real, N}
 
-Reversed argument order for backwards compatibility.
+This function offers a backwards-compatible interface to the Quadratic Kalman Filter (QKF) by accepting the data and model
+arguments in a reversed order compared to the standard interface. Typically, the preferred order is to pass the model first
+followed by the data. This method ensures that legacy code that follows the old argument order still functions correctly.
+
+Parameters:
+  - data::QKData{T1,N}: An instance containing the observed time series data formatted for the QKF. The data structure
+    organizes the measurements and any associated time indices to be processed by the filter.
+  - model::QKModel{T,T2}: An instance containing the model specifications which include the system dynamics, the augmented
+    state representation, and all relevant parameters required to perform the filtering and smoothing operations.
+
+Returns:
+  - QKFOutput{T}: A composite output object that includes both the filtering results and the smoothed state estimates.
+    This output encapsulates all intermediate steps and final results computed by invoking the standard qkf function
+    with the proper argument order.
+
+Note:
+   This reversed argument order function is maintained solely for backwards compatibility. Internally, it simply calls
+   qkf(model, data) to ensure that the original processing logic remains unchanged.
 """
 function qkf(data::QKData{T1,N}, model::QKModel{T,T2}) where {T1<:Real, T<:Real, T2<:Real, N}
     return qkf(model, data)

@@ -22,7 +22,7 @@ $\epsilon_t \sim \mathcal{N}(0, I).$
 Measurement equation:
 
 $Y_t = A + B X_t + \alpha Y_{t-1} + \sum_{i=1}^M e_i X_t^\prime C_i X_t + D \eta_t$,
-where $\eta_t \sim \mathcal{N}(0, I) and e_i is the baiss vector.$
+where $\eta_t \sim \mathcal{N}(0, I) and $e_i$ is the baiss vector.
 
 ![Quadratic Kalman Smoother Results](smoother_example.png)
 
@@ -68,8 +68,8 @@ M = 2  # Number of measurements
 
 # Generate stable state transition parameters
 μ = [0.1, 0.2]                 # N x 1 vector
-Φ = [0.5 0.1; 0.1 0.3]        # N x N matrix
-Σ = [0.6 0.15; 0.15 0.4]    # N x N matrix
+Φ = [0.5 0.1; 0.1 0.3]         # N x N matrix
+Σ = [0.6 0.15; 0.15 0.4]       # N x N matrix
 Ω = cholesky(Σ).L     
 
 # Generate measurement parameters
@@ -79,10 +79,10 @@ C = [[0.2 0.1; 0.1 0.0],        # M x 1 vector of N x N matrices
      [0.0 0.1; 0.1 0.2]]    
 V = [0.2 0.0; 0.0 0.2]          # M x M matrix
 D = cholesky(V).L
-α = zeros(M, M)             # M x M matrix
+α = zeros(M, M)                 # M x M matrix
 
 # Simulate data (see example in Documentation)
-# X, Y = ... simulation code ...
+# X, Y = ... simulation code ... # X is N x T and Y is M x T
 
 # Create model and run filter/smoother
 model = QKModel(N, M, μ, Φ, Ω, A, B, C, D, α)

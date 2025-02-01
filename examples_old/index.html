@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Examples · QuadraticKalman.jl</title><meta name="title" content="Examples · QuadraticKalman.jl"/><meta property="og:title" content="Examples · QuadraticKalman.jl"/><meta property="twitter:title" content="Examples · QuadraticKalman.jl"/><meta name="description" content="Documentation for QuadraticKalman.jl."/><meta property="og:description" content="Documentation for QuadraticKalman.jl."/><meta property="twitter:description" content="Documentation for QuadraticKalman.jl."/><meta property="og:url" content="https://dleather.github.io/QuadraticKalman.jl/stable/examples_old/"/><meta property="twitter:url" content="https://dleather.github.io/QuadraticKalman.jl/stable/examples_old/"/><link rel="canonical" href="https://dleather.github.io/QuadraticKalman.jl/stable/examples_old/"/><script async src="https://www.googletagmanager.com/gtag/js?id=UA-XXXXXXXXX-X"></script><script>  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'UA-XXXXXXXXX-X', {'page_path': location.pathname + location.search + location.hash});
+</script><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">QuadraticKalman.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../api/">API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Examples</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/dleather/QuadraticKalman.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/dleather/QuadraticKalman.jl/blob/main/docs/src/examples_old.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h1><p>This example demonstrates an end-to-end workflow using QuadraticKalman.jl. In this example we simulate state and observation data, run the Kalman filter and smoother, plot the results, and finally compute the negative log-likelihood along with its gradients.</p><pre><code class="language-julia hljs">using QuadraticKalman
+using Random, LinearAlgebra, Statistics, Plots
+
+# Step 1: Set Parameters
+N = 2                       # Number of states
+M = 2                       # Number of measurements
+T = 100                     # Number of time periods to simulate
+seed = 2314                 # Random seed for reproducibility
+Random.seed!(seed)
+
+# Generate stable state transition parameters
+Phi = [0.5 0.1; 0.1 0.3]    # Autoregressive (state transition) matrix
+mu = [0.1, 0.2]             # State drift vector
+Sigma = [0.6 0.15; 0.15 0.4] # State noise covariance matrix
+Omega = cholesky(Sigma).L   # Scale for state noise
+
+# Measurement parameters
+A = [0.0, 0.0]              # Measurement drift vector
+B = [1.0 0.0; 0.0 1.0]      # Measurement matrix linking state to observation
+C = [[0.2 0.1; 0.1 0.0],     # Quadratic effect for first measurement
+     [0.0 0.1; 0.1 0.2]]     # Quadratic effect for second measurement
+V = [0.2 0.0; 0.0 0.2]      # Measurement noise covariance matrix
+D = cholesky(V).L           # Scale for measurement noise
+alpha = zeros(M, M)         # Measurement autoregressive matrix
+
+# Step 2: Simulate States
+X = zeros(N, T)
+X[:, 1] = (I - Phi) \ mu     # Initialize state at the unconditional mean
+for t in 1:(T-1)
+    shock = randn(N)
+    X[:, t+1] = mu + Phi * X[:, t] + Omega * shock
+end
+
+# Step 3: Simulate Observations
+Y = zeros(M, T)
+for t in 1:T
+    noise = randn(M)
+    xt = X[:, t]
+
+    # Linear component
+    Y[:, t] = A + B * xt
+
+    # Include autoregressive measurement component if t &gt; 1
+    if t &gt; 1
+        Y[:, t] += alpha * Y[:, t-1]
+    end
+
+    # Add quadratic effects for each measurement
+    for i in 1:M
+        Y[i, t] += xt&#39; * C[i] * xt
+    end
+
+    # Add measurement noise
+    Y[:, t] += D * noise
+end
+
+# Step 4: Define and Initialize the Model
+model = QKModel(N, M, mu, Phi, Omega, A, B, C, D, alpha)
+
+# Step 5: Create Data Structure and Run the Filter
+data = QKData(Y)
+results = qkf_filter(data, model)
+
+# Step 6: Run the Smoother
+results_smoother = qkf_smoother(results, model)
+
+# Display Log-Likelihood and Plot Results
+println(&quot;Filter Log-Likelihood: &quot;, sum(results.ll_t))
+plot(kalman_filter_truth_plot(X, results))
+plot(kalman_smoother_truth_plot(X, results_smoother))
+plot(kalman_filter_plot(results))
+plot(kalman_smoother_plot(results_smoother))
+
+# Step 7: Model-Parameter Conversion and Gradient Analysis
+params = model_to_params(model)
+model_from_params = params_to_model(params, N, M)
+
+# Compute negative log-likelihood function for automatic differentiation
+nll(params) = qkf_negloglik(params, data, N, M)
+
+using ForwardDiff, FiniteDiff
+grad = ForwardDiff.gradient(nll, params)
+grad_fd = FiniteDiff.finite_difference_gradient(nll, params)
+println(&quot;Max absolute difference in gradients: &quot;, maximum(abs.(grad - grad_fd)))
+println(&quot;Hessian condition number: &quot;, cond(ForwardDiff.hessian(nll, params)))</code></pre><p>This example illustrates how to simulate data, apply the Quadratic Kalman Filter and Smoother, visualize the results, and verify parameter estimation via gradient computations.</p></article><nav class="docs-footer"><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.0 on <span class="colophon-date" title="Saturday 1 February 2025 03:08">Saturday 1 February 2025</span>. Using Julia version 1.10.8.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

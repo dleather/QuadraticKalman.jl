@@ -22,7 +22,7 @@ $\epsilon_t \sim \mathcal{N}(0, I).$
 Measurement equation:
 
 $Y_t = A + B X_t + \alpha Y_{t-1} + \sum_{i=1}^M e_i X_t^\prime C_i X_t + D \eta_t$,
-where $\eta_t \sim \mathcal{N}(0, I)$ and $e_i$ is the baiss vector.
+where $\eta_t \sim \mathcal{N}(0, I)$ and $e_i$ is the basis vector.
 
 ![Quadratic Kalman Smoother Results](smoother_example.png)
 

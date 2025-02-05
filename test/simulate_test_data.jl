@@ -79,9 +79,6 @@ end
 
 X, Y, params = simulate_test_data()
 
-# Save data to CSV files that both Julia and R can read
-using CSV, DataFrames
-
 # Convert state matrix to DataFrame with column names x1, x2
 X_df = DataFrame(X', :auto)
 rename!(X_df, [Symbol("x$i") for i in 1:size(X,1)])

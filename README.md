@@ -101,7 +101,7 @@ grad = ForwardDiff.gradient(nll, params)
 hess = ForwardDiff.hessian(nll, params)
 ```
 ## Benchmarks
-
+<div align="center">
 | T | N | M | Julia Median Time | Julia Min Time | R Median Time | R Min Time |
 |-------|---|---|-------------------|----------------|---------------|------------|
 | 10    | 1 | 1 | 0.13105          | 0.1271         | 7.74455       | 7.1367     |
@@ -113,8 +113,9 @@ hess = ForwardDiff.hessian(nll, params)
 | 10    | 5 | 5 | 28.94405         | 25.1419        | 791.0381      | 764.5707   |
 | 100   | 5 | 5 | 324.25255        | 318.0287       | 8591.90765    | 8376.8481  |
 | 1000  | 5 | 5 | 3267.50065       | 3249.1087      | 93159.1726    | 85904.4203 |
-*Note: Times are measured in milliseconds. Lower values indicate better performance. Benchmarked on 100 runs each. Julia code used `BenchmarkTools.jl` package where R code uses `microbenchmark` package. Effort was made to remove error-checking and compilation steps from R code to make comparison as relevant as possible.*
 
+*Note: Times are measured in milliseconds. Lower values indicate better performance. Benchmarked on 100 runs each. Julia code used `BenchmarkTools.jl` package where R code uses `microbenchmark` package. Effort was made to remove error-checking and compilation steps from R code to make comparison as relevant as possible.*
+</div>
 ![Quadratic Filter Benchmark](benchmarks/results/scaling_comparison.png)
 
 

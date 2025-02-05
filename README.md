@@ -102,28 +102,21 @@ hess = ForwardDiff.hessian(nll, params)
 ```
 ## Benchmarks
 
+| T | N | M | Julia Median Time | Julia Min Time | R Median Time | R Min Time |
+|-------|---|---|-------------------|----------------|---------------|------------|
+| 10    | 1 | 1 | 0.13105          | 0.1271         | 7.74455       | 7.1367     |
+| 100   | 1 | 1 | 1.249            | 1.1979         | 84.9028       | 80.7364    |
+| 1000  | 1 | 1 | 13.7519          | 12.8033        | 851.7696      | 837.7759   |
+| 10    | 2 | 2 | 0.8839           | 0.7449         | 8.57615       | 7.8857     |
+| 100   | 2 | 2 | 9.08795          | 8.1247         | 94.19605      | 89.3201    |
+| 1000  | 2 | 2 | 94.4929          | 87.5616        | 1013.1734     | 926.0593   |
+| 10    | 5 | 5 | 28.94405         | 25.1419        | 791.0381      | 764.5707   |
+| 100   | 5 | 5 | 324.25255        | 318.0287       | 8591.90765    | 8376.8481  |
+| 1000  | 5 | 5 | 3267.50065       | 3249.1087      | 93159.1726    | 85904.4203 |
+*Note: Times are measured in milliseconds. Lower values indicate better performance. Benchmarked on 100 runs each. Julia code used `BenchmarkTools.jl` package where R code uses `microbenchmark` package. Effort was made to remove error-checking and compilation steps from R code to make comparison as relevant as possible.*
+
 ![Quadratic Filter Benchmark](benchmarks/results/scaling_comparison.png)
 
-| T_bar | N | M | Language | Median Time | Min Time |
-|-------|---|---|----------|-------------|-----------|
-| 10    | 1 | 1 | Julia    | 0.13105     | 0.1271    |
-| 10    | 1 | 1 | R        | 7.74455     | 7.1367    |
-| 100   | 1 | 1 | Julia    | 1.249       | 1.1979    |
-| 100   | 1 | 1 | R        | 84.9028     | 80.7364   |
-| 1000  | 1 | 1 | Julia    | 13.7519     | 12.8033   |
-| 1000  | 1 | 1 | R        | 851.7696    | 837.7759  |
-| 10    | 2 | 2 | Julia    | 0.8839      | 0.7449    |
-| 10    | 2 | 2 | R        | 8.57615     | 7.8857    |
-| 100   | 2 | 2 | Julia    | 9.08795     | 8.1247    |
-| 100   | 2 | 2 | R        | 94.19605    | 89.3201   |
-| 1000  | 2 | 2 | Julia    | 94.4929     | 87.5616   |
-| 1000  | 2 | 2 | R        | 1013.1734   | 926.0593  |
-| 10    | 5 | 5 | Julia    | 28.94405    | 25.1419   |
-| 10    | 5 | 5 | R        | 791.0381    | 764.5707  |
-| 100   | 5 | 5 | Julia    | 324.25255   | 318.0287  |
-| 100   | 5 | 5 | R        | 8591.90765  | 8376.8481 |
-| 1000  | 5 | 5 | Julia    | 3267.50065  | 3249.1087 |
-| 1000  | 5 | 5 | R        | 93159.1726  | 85904.4203|
 
 ## Citations
 

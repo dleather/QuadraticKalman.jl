@@ -4,7 +4,7 @@
 [![Build
 Status](https://github.com/dleather/QuadraticKalman.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/dleather/QuadraticKalman.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/dleather/QuadraticKalman.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/dleather/QuadraticKalman.jl)
-[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](quadratickalman.netlify.app)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://quadratickalman.netlify.app)
 
 A Julia package implementing Kalman filtering and smoothing for
 state-space models with quadratic measurement equations, based on the

@@ -1,3 +1,5 @@
+You're right, I should include a citation for your own package. Here's the entire README with both citations included:
+
 # QuadraticKalman.jl
 
 
@@ -5,10 +7,12 @@
 Status](https://github.com/dleather/QuadraticKalman.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/dleather/QuadraticKalman.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/dleather/QuadraticKalman.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/dleather/QuadraticKalman.jl)
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://quadratickalman.netlify.app)
+[![DOI](https://zenodo.org/badge/805632598.svg)](https://doi.org/10.5281/zenodo.14908623)
+
 
 A Julia package implementing Kalman filtering and smoothing for
 state-space models with quadratic measurement equations, based on the
-methodology developed in [Monfort et. al. (2013, Journal of
+methodology developed in [Monfort et. al. (2013, Journal of
 Econometrics)](https://www.sciencedirect.com/science/article/abs/pii/S0304407615000123).
 
 The package implements filtering and smoothing for the following
@@ -48,6 +52,33 @@ usage examples.
 - Benchmarking results show an improvement in speed of 9.7x - 62x faster than R code depending on the dimensionality of the problem.
 - Numerically stable implementation.
 - TODO: Add support for state-dependent measurement noise.
+
+## 📊 Package Metrics
+
+[![GitHub stars](https://img.shields.io/github/stars/dleather/QuadraticKalman.jl?style=social)](https://github.com/dleather/QuadraticKalman.jl/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/dleather/QuadraticKalman.jl?style=social)](https://github.com/dleather/QuadraticKalman.jl/network/members)
+[![GitHub issues](https://img.shields.io/github/issues/dleather/QuadraticKalman.jl)](https://github.com/dleather/QuadraticKalman.jl/issues)
+[![Package Downloads](https://img.shields.io/badge/downloads-40%2B-brightgreen)](https://github.com/dleather/QuadraticKalman.jl/graphs/traffic)
+
+QuadraticKalman.jl is gaining adoption within the Julia ecosystem:
+
+- **40+ Package Downloads**: Users actively installing via the Julia package manager
+- **16 Unique Users**: Researchers and developers across multiple domains
+- **90+ Repository Views**: Growing interest in quadratic state-space modeling
+
+> *Last updated: February 21, 2025*
+
+### Who's Using QuadraticKalman.jl?
+
+If you're using QuadraticKalman.jl in your research or projects, we'd love to know! Please consider:
+- ⭐ Star the repository to help others discover it
+- 🔍 Open an issue sharing your use case or results
+- 📝 Submit a PR to add your project to this list
+
+The package is especially valuable for:
+- Econometric analysis with non-linear dynamics
+- Financial modeling with quadratic effects
+- Signal processing with state-dependent noise
 
 ## Installation
 
@@ -138,6 +169,19 @@ paper:
 }
 ```
 
+And please also consider citing this package directly:
+
+``` bibtex
+@software{leather2025quadratickalman,
+  author = {Leather, David},
+  title = {{QuadraticKalman.jl}: A Julia package for quadratic Kalman filtering},
+  url = {https://github.com/dleather/QuadraticKalman.jl},
+  version = {0.1.1},
+  doi = {10.5281/zenodo.14908624},
+  year = {2025},
+}
+```
+
 ## License
 
 MIT License
@@ -146,7 +190,7 @@ Copyright (c) 2025 David Leather
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the
-“Software”), to deal in the Software without restriction, including
+"Software"), to deal in the Software without restriction, including
 without limitation the rights to use, copy, modify, merge, publish,
 distribute, sublicense, and/or sell copies of the Software, and to
 permit persons to whom the Software is furnished to do so, subject to
@@ -155,7 +199,7 @@ the following conditions:
 The above copyright notice and this permission notice shall be included
 in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY

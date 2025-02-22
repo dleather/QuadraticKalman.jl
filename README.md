@@ -1,5 +1,3 @@
-You're right, I should include a citation for your own package. Here's the entire README with both citations included:
-
 # QuadraticKalman.jl
 
 

@@ -58,17 +58,9 @@ usage examples.
 [![GitHub issues](https://img.shields.io/github/issues/dleather/QuadraticKalman.jl)](https://github.com/dleather/QuadraticKalman.jl/issues)
 [![Package Downloads](https://img.shields.io/badge/downloads-40%2B-brightgreen)](https://github.com/dleather/QuadraticKalman.jl/graphs/traffic)
 
-QuadraticKalman.jl is gaining adoption within the Julia ecosystem:
-
-- **40+ Package Downloads**: Users actively installing via the Julia package manager
-- **16 Unique Users**: Researchers and developers across multiple domains
-- **90+ Repository Views**: Growing interest in quadratic state-space modeling
-
-> *Last updated: February 21, 2025*
-
 ### Who's Using QuadraticKalman.jl?
 
-If you're using QuadraticKalman.jl in your research or projects, we'd love to know! Please consider:
+If you're using QuadraticKalman.jl in your research or projects, I'd love to know! Please consider:
 - ⭐ Star the repository to help others discover it
 - 🔍 Open an issue sharing your use case or results
 - 📝 Submit a PR to add your project to this list
@@ -76,7 +68,7 @@ If you're using QuadraticKalman.jl in your research or projects, we'd love to kn
 The package is especially valuable for:
 - Econometric analysis with non-linear dynamics
 - Financial modeling with quadratic effects
-- Signal processing with state-dependent noise
+- Spatial filtering with interactions.
 
 ## Installation
 

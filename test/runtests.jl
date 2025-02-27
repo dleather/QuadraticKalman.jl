@@ -6,7 +6,14 @@ using RData, JSON
 using Aqua, Plots
 @testset "QuadraticKalman.jl" begin
     @testset "Code quality (Aqua.jl)" begin
-        Aqua.test_all(QK)
+        Aqua.test_all(QK, ambiguities=false)
+        Aqua.test_ambiguities(QK)
+        Aqua.test_unbound_args(QK)
+        Aqua.test_undefined_exports(QK)
+        Aqua.test_project_extras(QK)
+        Aqua.test_deps_compat(QK)
+        Aqua.test_piracies(QK)
+        Aqua.test_persistent_tasks(QK)
     end
     include("test_data.jl")
     include("test_params.jl")
@@ -16,7 +23,10 @@ using Aqua, Plots
     include("test_core_smoother.jl")
     include("test_plots.jl")
     include("test_model_params_conversion.jl")
-    #include("test_end_to_end.jl")
+    include("test_likelihood_edge_cases.jl")
+    include("test_logpdf_mvn.jl")
+    include("test_qkf_negloglik.jl")
+    include("test_end_to_end.jl")
     try
         include("test_r_comparison.jl")  # If you have R-based comparisons
     catch err

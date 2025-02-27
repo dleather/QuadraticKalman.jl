@@ -50,7 +50,7 @@ number of time periods minus 1 (due to the autoregressive structure of the model
 # Fields
 - `Y::AbstractArray{T, N}` : The underlying data array (N-dimensional, element type `<: Real`).
 - `M::Int` : The first dimension of `Y` if `Y` is at least 2D. If `N == 1`, we define `M = 1`.
-- `T_bar::Int` : One less than the “second dimension” in a 2D case, or `length(Y) - 1` for a 1D vector.
+- `T_bar::Int` : One less than the "second dimension" in a 2D case, or `length(Y) - 1` for a 1D vector.
 """
 @with_kw struct QKData{T<:Real, N}
     Y::AbstractArray{T, N}  # Data array
@@ -78,6 +78,9 @@ For matrix input (N=2):
   - T_bar is second dimension size minus 1
 """
 function QKData(Y::AbstractArray{T, N}) where {T<:Real, N}
+    if any(isnan, Y)
+        throw(ArgumentError("Input data contains NaN values"))
+    end
     if N == 1   # ...data is univariate...
         M = 1
         Tp1 = length(Y)

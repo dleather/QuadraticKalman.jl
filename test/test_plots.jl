@@ -67,4 +67,19 @@ gr()
         p5 = plot(QK.KalmanFilterTruthPlot(single_state, single_filter))
         @test p5.attr[:layout] == (1, 1)
     end
+
+    @testset "Edge Cases for Plots" begin
+        # Test with single state
+        single_state = randn(1, 5)
+        single_P = cat([fill(0.1, 1, 1) for _ in 1:5]..., dims=3)
+        single_filter = QK.FilterOutput(randn(4), single_state, single_P)
+        p = plot(QK.KalmanFilterPlot(single_filter))
+        @test p isa Plots.Plot
+        
+        # Test with zero variance
+        zero_var_P = cat([zeros(2, 2) for _ in 1:5]..., dims=3)
+        zero_var_filter = QK.FilterOutput(randn(4), randn(2, 5), zero_var_P)
+        p = plot(QK.KalmanFilterPlot(zero_var_filter))
+        @test p isa Plots.Plot
+    end
 end

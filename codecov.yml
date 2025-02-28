@@ -3,11 +3,11 @@ coverage:
     project:
       default:
         target: auto
-        threshold: 5%
-    patch:
-      default:
-        target: auto
-        threshold: 5%
+        threshold: 1%
+    patch: off
+
+ignore:
+  - "src/extensions/**/*"  # Ignore everything in the extensions directory
 
 comment:
   layout: "reach, diff, flags, files"

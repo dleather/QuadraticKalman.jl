@@ -2,7 +2,7 @@
 
 julia_version = "1.11.3"
 manifest_format = "2.0"
-project_hash = "b4443d2436983c58afcecddb55729b1778162f8b"
+project_hash = "1b463ae84b6f6be38106e683c4cfcf32613969de"
 
 [[deps.Accessors]]
 deps = ["CompositionsBase", "ConstructionBase", "Dates", "InverseFunctions", "MacroTools"]
@@ -1095,9 +1095,7 @@ version = "2.11.1"
 
 [[deps.QuadraticKalman]]
 deps = ["DifferentiableEigen", "ForwardDiff", "LinearAlgebra", "LogExpFunctions", "Parameters", "Preferences", "Random", "RecipesBase", "SparseArrays", "SpecialFunctions"]
-git-tree-sha1 = "622856d75e6e693b3ea7d9b4eed56ad7a1a3e7ad"
-repo-rev = "main"
-repo-url = ".."
+path = ".."
 uuid = "03de00d5-86b5-48ba-885c-e25084f99d9a"
 version = "0.1.1"
 

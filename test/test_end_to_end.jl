@@ -73,24 +73,68 @@ end
         smoother_results = QK.qkf_smoother(filter_results, model)
         
         # Test filter results
-        @test length(filter_results.ll_t) == T-1
-        @test size(filter_results.Z_tt) == (N + N^2, T)
-        @test !any(isnan, filter_results.Z_tt)
-        @test !any(isnan, filter_results.ll_t)
+        @testset "Filter results structure" begin
+            @test length(filter_results.ll_t) == T-1
+            @test size(filter_results.Z_tt) == (N + N^2, T)
+            @test !any(isnan, filter_results.Z_tt)
+            @test !any(isnan, filter_results.ll_t)
+        end
         
         # Test smoother results
-        @test size(smoother_results.Z_smooth) == (N + N^2, T)
-        @test !any(isnan, smoother_results.Z_smooth)
+        @testset "Smoother results structure" begin
+            @test size(smoother_results.Z_smooth) == (N + N^2, T)
+            @test !any(isnan, smoother_results.Z_smooth)
+        end
         
         # Test parameter conversion
-        params = QK.model_to_params(model)
-        model_reconstructed = QK.params_to_model(params, N, M)
+        @testset "Parameter conversion" begin
+            params = QK.model_to_params(model)
+            model_reconstructed = QK.params_to_model(params, N, M)
+            
+            # Test state parameters
+            @test model_reconstructed.state.N == model.state.N
+            @test model_reconstructed.state.mu == model.state.mu
+            @test model_reconstructed.state.Phi == model.state.Phi
+            @test model_reconstructed.state.Omega == model.state.Omega
+            @test model_reconstructed.state.Sigma == model.state.Sigma
+            
+            # Test measurement parameters
+            @test model_reconstructed.meas.M == model.meas.M
+            @test model_reconstructed.meas.A == model.meas.A
+            @test model_reconstructed.meas.B == model.meas.B
+            @test model_reconstructed.meas.C == model.meas.C
+            @test model_reconstructed.meas.D == model.meas.D
+            @test model_reconstructed.meas.alpha == model.meas.alpha
+            
+            # Test augmented state parameters
+            @test model_reconstructed.aug_state.mu_aug == model.aug_state.mu_aug
+            @test model_reconstructed.aug_state.Phi_aug == model.aug_state.Phi_aug
+            @test model_reconstructed.aug_state.B_aug == model.aug_state.B_aug
+            @test model_reconstructed.aug_state.H_aug == model.aug_state.H_aug
+            @test model_reconstructed.aug_state.G_aug == model.aug_state.G_aug
+            @test model_reconstructed.aug_state.Lambda == model.aug_state.Lambda
+            @test model_reconstructed.aug_state.L1 == model.aug_state.L1
+            @test model_reconstructed.aug_state.L2 == model.aug_state.L2
+            @test model_reconstructed.aug_state.L3 == model.aug_state.L3
+            @test model_reconstructed.aug_state.P == model.aug_state.P
+            
+            # Test moments
+            @test model_reconstructed.moments.state_mean == model.moments.state_mean
+            @test model_reconstructed.moments.state_cov == model.moments.state_cov
+            @test model_reconstructed.moments.aug_mean == model.moments.aug_mean
+            @test model_reconstructed.moments.aug_cov == model.moments.aug_cov
+            
+        end
         
         # Test negative log-likelihood function
-        nll = QK.qkf_negloglik(params, data, N, M)
-        @test nll isa Real
-        @test !isnan(nll)
-        @test !isinf(nll)
+        @testset "Negative log-likelihood" begin
+            # Define params here to ensure it's in scope
+            params = QK.model_to_params(model)
+            nll = QK.qkf_negloglik(params, data, N, M)
+            @test nll isa Real
+            @test !isnan(nll)
+            @test !isinf(nll)
+        end
     end
     
     @testset "Error Handling" begin
@@ -111,23 +155,16 @@ end
         model = QK.QKModel(N, M, mu, Phi, Omega, A, B, C, D, alpha)
         
         # Test that QKData constructor throws error for invalid data
-        @test_throws ArgumentError QK.QKData(invalid_Y)
+        @testset "Invalid data detection" begin
+            @test_throws ArgumentError QK.QKData(invalid_Y)
+        end
         
         # Test with NaN values - only if the implementation checks for NaNs
-        # Check if the implementation actually validates for NaNs
-        Y_with_nan = ones(M, 3)
-        Y_with_nan[1,2] = NaN
-        
-        # Try to create the data object and check if it throws an error
-        # If it doesn't throw an error, we'll test that it at least creates a valid object
-        try
-            @test_throws ArgumentError QK.QKData(Y_with_nan)
-        catch
-            # If the test fails, check if the implementation allows NaNs
-            # In that case, we'll just test that the constructor works
-            data_with_nan = QK.QKData(Y_with_nan)
-            @test data_with_nan.M == M
-            @test data_with_nan.T_bar == 2
+        @testset "NaN detection" begin
+            Y_with_nan = ones(M, 3)
+            Y_with_nan[1,2] = NaN
+            
+            @test_throws AssertionError QK.QKData(Y_with_nan)
         end
     end
     
@@ -143,37 +180,53 @@ end
                 # Fix the cumsum issue by specifying dims
                 Y = cumsum(randn(M, T), dims=2)  # Simple random walk
                 
-                # Save to CSV
-                Y_df = DataFrame(Y', :auto)
-                rename!(Y_df, [Symbol("y$i") for i in 1:M])
-                csv_path = joinpath(temp_dir, "test_data.csv")
-                CSV.write(csv_path, Y_df)
+                @testset "CSV data export" begin
+                    # Save to CSV
+                    Y_df = DataFrame(Y', :auto)
+                    rename!(Y_df, [Symbol("y$i") for i in 1:M])
+                    csv_path = joinpath(temp_dir, "test_data.csv")
+                    CSV.write(csv_path, Y_df)
+                    @test isfile(csv_path)
+                end
                 
-                # Read back and create QKData
-                data_df = CSV.read(csv_path, DataFrame)
-                Y_loaded = Matrix(data_df)'
+                @testset "CSV data import" begin
+                    # Read back and create QKData
+                    csv_path = joinpath(temp_dir, "test_data.csv")
+                    data_df = CSV.read(csv_path, DataFrame)
+                    Y_loaded = Matrix(data_df)'
+                    
+                    # Create data object
+                    data = QK.QKData(Y_loaded)
+                    @test data.M == M
+                    @test data.T_bar == T-1
+                end
                 
-                # Create data object
-                data = QK.QKData(Y_loaded)
-                
-                # Create simple model
-                mu = [0.0]
-                Phi = reshape([0.9], 1, 1)
-                Omega = reshape([0.1], 1, 1)
-                A = [0.0]
-                B = reshape([1.0], 1, 1)
-                C = [reshape([0.0], 1, 1)]
-                D = reshape([0.1], 1, 1)
-                alpha = reshape([0.0], 1, 1)
-                
-                model = QK.QKModel(N, M, mu, Phi, Omega, A, B, C, D, alpha)
-                
-                # Run filter
-                results = QK.qkf_filter(data, model)
-                
-                # Basic checks
-                @test length(results.ll_t) == T-1
-                @test size(results.Z_tt) == (N + N^2, T)
+                @testset "Filter with CSV data" begin
+                    # Create data object
+                    csv_path = joinpath(temp_dir, "test_data.csv")
+                    data_df = CSV.read(csv_path, DataFrame)
+                    Y_loaded = Matrix(data_df)'
+                    data = QK.QKData(Y_loaded)
+                    
+                    # Create simple model
+                    mu = [0.0]
+                    Phi = reshape([0.9], 1, 1)
+                    Omega = reshape([0.1], 1, 1)
+                    A = [0.0]
+                    B = reshape([1.0], 1, 1)
+                    C = [reshape([0.0], 1, 1)]
+                    D = reshape([0.1], 1, 1)
+                    alpha = reshape([0.0], 1, 1)
+                    
+                    model = QK.QKModel(N, M, mu, Phi, Omega, A, B, C, D, alpha)
+                    
+                    # Run filter
+                    results = QK.qkf_filter(data, model)
+                    
+                    # Basic checks
+                    @test length(results.ll_t) == T-1
+                    @test size(results.Z_tt) == (N + N^2, T)
+                end
             finally
                 # Clean up
                 rm(temp_dir, recursive=true)
@@ -214,11 +267,15 @@ end
         data = QK.QKData(Y)
         
         # Test performance
-        filter_time = @elapsed QK.qkf_filter(data, model)
-        @test filter_time < 10.0  # Should complete in reasonable time
+        @testset "Filter execution time" begin
+            filter_time = @elapsed QK.qkf_filter(data, model)
+            @test filter_time < 10.0  # Should complete in reasonable time
+        end
         
         # Test memory allocation
-        filter_allocs = @allocated QK.qkf_filter(data, model)
-        @test filter_allocs < 100_000_000  # Reasonable memory usage
+        @testset "Filter memory allocation" begin
+            filter_allocs = @allocated QK.qkf_filter(data, model)
+            @test filter_allocs < 100_000_000  # Reasonable memory usage
+        end
     end
 end

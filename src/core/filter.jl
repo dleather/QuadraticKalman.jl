@@ -98,7 +98,9 @@ function predict_Z_ttm1!(Z_tt::AbstractMatrix{T}, Z_ttm1::AbstractMatrix{T},
     model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
 
     @unpack Phi_aug, mu_aug = model.aug_state
-    Z_ttm1[:, t] = mu_aug .+ Phi_aug * Z_tt[:, t]
+    Z_ttm1_view = @view Z_ttm1[:, t]
+    Z_tt_view = @view Z_tt[:, t]
+    Z_ttm1_view .= mu_aug .+ Phi_aug * Z_tt_view
 end
 
 """
@@ -175,10 +177,14 @@ function predict_P_ttm1!(P_tt::AbstractArray{Real,3}, P_ttm1::AbstractArray{Real
     # 1) Update Σₜₜ₋₁ based on Zₜₜ (the code snippet calls compute_Σₜₜ₋₁!)
     compute_Sigma_ttm1!(Σ_ttm1, Z_tt, model, t)
 
-    # 2) Build predicted covariance
+    # 2) Build predicted covariance using views
     @unpack Phi_aug = model.aug_state
-    P_ttm1[:, :, t] = ensure_positive_definite(
-        Phi_aug * P_tt[:, :, t] * Phi_aug' .+ Σ_ttm1[:, :, t]
+    local P_tt_view = @view P_tt[:, :, t]
+    local Σ_ttm1_view = @view Σ_ttm1[:, :, t]
+    local P_ttm1_view = @view P_ttm1[:, :, t]
+    
+    P_ttm1_view .= ensure_positive_definite(
+        Phi_aug * P_tt_view * Phi_aug' .+ Σ_ttm1_view
     )
 end
 
@@ -280,8 +286,12 @@ function predict_Y_ttm1!(
     @unpack A, alpha = model.meas
     @unpack B_aug = model.aug_state
 
-    # Overwrite the t-th column in-place
-    Y_ttm1[:, t] = A .+ B_aug * Z_ttm1[:, t] .+ alpha * Y[:, t]
+    # Overwrite the t-th column in-place using views
+    Y_ttm1_view = @view Y_ttm1[:, t]
+    Z_ttm1_view = @view Z_ttm1[:, t]
+    Y_view = @view Y[:, t]
+
+    Y_ttm1_view .= A .+ B_aug * Z_ttm1_view .+ alpha * Y_view
 end
 
 """
@@ -370,34 +380,33 @@ function predict_M_ttm1!(M_ttm1::AbstractArray{T,3}, P_ttm1::AbstractArray{T,3},
 
     @unpack M, V = model.meas
     @unpack B_aug = model.aug_state
-
+    
     # 1) In-place multiplication:
     #    tmpB = B̃ * Pₜₜ₋₁[:,:,t]
-    mul!(tmpB, B_aug, P_ttm1[:,:,t])
+    mul!(tmpB, B_aug, @view P_ttm1[:,:,t])
 
     #    Mₜₜ₋₁[:,:,t] = tmpB * B̃'
-    mul!(M_ttm1[:,:,t], tmpB, B̃', 1.0, 0.0)
+    local M_slice = @view M_ttm1[:,:,t]
+    mul!(M_slice, tmpB, B_aug', 1.0, 0.0)
 
     # 2) Add V to Mₜₜ₋₁[:,:,t]
     @inbounds for i in 1:M
         for j in 1:M
-            M_ttm1[i,j,t] += V[i,j]
+            M_slice[i,j] += V[i,j]
         end
     end
 
     # 3) Check for negativity in univariate case
     if M == 1
-        if M_ttm1[1,1,t] < 0
-            M_ttm1[1,1,t] = 1e-4
+        if M_slice[1,1] < 0
+            M_slice[1,1] = 1e-4
         end
 
     # 4) For multivariate, enforce positive-definiteness if needed
     else
-        # `view` avoids copying, but you can index directly as well
-        local slice_ref = @view M_ttm1[:,:,t]
-        if !isposdef(slice_ref)
-            local corrected = make_positive_definite(slice_ref)
-            slice_ref .= corrected
+        if !isposdef(M_slice)
+            local corrected = make_positive_definite(M_slice)
+            M_slice .= corrected
         end
     end
 end
@@ -526,7 +535,7 @@ function compute_K_t!(
       # Matrix solve: Kslice = (P_pred * B_aug') * inv(M_pred)
       F = lu(M_pred)  # Use M_pred instead of S
       for col in 1:size(Kslice,2)
-          Kslice[:, col] = F \ Kslice[:, col]
+          view(Kslice, :, col) .= F \ view(Kslice, :, col)
       end
   end
 end
@@ -609,7 +618,7 @@ using the current measurements and the Kalman gain.
   The (1-based) time index.
 
 # Returns
-Nothing. It modifies `Z_tt[:, t+1]` **in-place** to:
+Nothing. It modifies `Z_tt[:, t+1]` **in place** to:
 `Z_tt[:, t+1] = Z_ttm1[:, t] + K_t[:, :, t] * ( Y[:, t] - Y_ttm1[:, t] )`
 
 # Notes
@@ -629,7 +638,7 @@ function update_Z_tt!(
     t::Int) where {T<:Real}
 
     # Core linear update
-    Z_tt[:, t+1] = Z_ttm1[:, t] .+ K_t[:, :, t] * (Y[:, t] .- Y_ttm1[:, t])
+    view(Z_tt, :, t+1) .= view(Z_ttm1, :, t) .+ view(K_t, :, :, t) * (view(Y, :, t) .- view(Y_ttm1, :, t))
 end
 
 """
@@ -686,7 +695,7 @@ function update_Z_tt(
 end
 
 """
-    update_P_tt!(P_tt, K_t, M_ttm1, P_ttm1, Z_ttm1, tmpKM, tmpKMK, model, t)
+    update_P_tt!(P_tt, K_t, P_ttm1, Z_ttm1, tmpKM, tmpKMK, model, t)
 
 In-place update of the **filtered covariance** `P_tt[:, :, t+1]` given the one-step-ahead 
 covariance `P_ttm1[:, :, t]`, and the Kalman gain `K_t[:, :, t]`.
@@ -696,8 +705,6 @@ covariance `P_ttm1[:, :, t]`, and the Kalman gain `K_t[:, :, t]`.
   We write the new filtered covariance into `P_tt[:, :, t+1]`.
 - `K_t::AbstractArray{<:Real, 3}`: A 3D array `(P×M×T̄)` of Kalman gains, 
   using `K_t[:, :, t]`.
-- `M_ttm1::AbstractArray{<:Real, 3}`: *(Currently unused)* or was presumably
-  the predicted measurement covariance `(M×M×T̄)`. Not directly used in the final expression.
 - `P_ttm1::AbstractArray{<:Real, 3}`: The one-step-ahead covariance array `(P×P×T̄)`, 
   from which `P_ttm1[:, :, t]` is read.
 - `Z_ttm1::AbstractArray{<:Real, 2}`: `(P×T̄)` storing the predicted augmented state. 
@@ -722,20 +729,33 @@ covariance `P_ttm1[:, :, t]`, and the Kalman gain `K_t[:, :, t]`.
    make_positive_definite. If your AD can handle in-place modifications, or you define a
    custom adjoint, it should be fine. Otherwise, consider a purely functional approach.
 """
-function update_P_tt!( P_tt::AbstractArray{Real,3}, K_t::AbstractArray{Real,3},
+function update_P_tt!(P_tt::AbstractArray{Real,3}, K_t::AbstractArray{Real,3},
     P_ttm1::AbstractArray{Real,3},
     Z_ttm1::AbstractArray{Real,2}, tmpKM::AbstractMatrix{Real},
     tmpKMK::AbstractMatrix{Real}, model::QKModel{T,T2}, t::Int ) where {T<:Real, T2<:Real}
     @unpack V = model.meas
     @unpack B_aug = model.aug_state
     
-    # 1) Form A = I - K_t[:, :, t]*B_aug
-    local A = I - K_t[:, :, t]*B_aug
+    # 1) Extract views
+    local K_slice = view(K_t, :, :, t)
+    local P_ttm1_view = view(P_ttm1, :, :, t)
+    local P_tt_dest = view(P_tt, :, :, t+1)
     
-    # 2) In-place assign the final updated covariance
-    P_tt[:, :, t+1] = make_positive_definite(
-        A * P_ttm1[:, :, t] * A' .+ (K_t[:, :, t] * V * K_t[:, :, t]')
-    )
+    # 2) Form A = I - K_slice*B_aug
+    mul!(tmpKM, K_slice, B_aug)  # Use provided temporary matrix
+    A = I - tmpKM
+    
+    # 3) Compute A * P_ttm1_view * A' efficiently
+    mul!(tmpKMK, A, P_ttm1_view)  # tmpKMK = A * P_ttm1_view
+    mul!(P_tt_dest, tmpKMK, A')   # P_tt_dest = tmpKMK * A'
+    
+    # 4) Add the K*V*K' term
+    mul!(tmpKMK, K_slice, V)      # tmpKMK = K_slice * V
+    mul!(tmpKM, tmpKMK, K_slice') # tmpKM = tmpKMK * K_slice'
+    P_tt_dest .+= tmpKM           # Add to result
+    
+    # 5) Ensure positive-definiteness
+    P_tt_dest .= make_positive_definite(P_tt_dest)
 end
 
 """
@@ -815,28 +835,33 @@ function correct_Z_tt!(Z_tt::AbstractMatrix{T1}, model::QKModel{T, T2}, t::Int) 
 
     @unpack N = model.state
     
-    # 1) Extract relevant piece
-    Z_tt = Z_tt[:, t + 1] # Z_tt[:, t+1] is the "current" column in the filter
+    # 1) Extract relevant piece with view
+    Z_current = @view Z_tt[:, t + 1] # Z_tt[:, t+1] is the "current" column in the filter
     
-    # 2) Extract x_t and implied (XX')ₜ
-    xt = Z_tt[1:N]                              # the first N entries are xₜ|ₜ
-    XtXt_prime = reshape(Z_tt[N+1:end], N, N)    # the next N*N entries are XX' in vectorized form
+    # 2) Extract x_t and implied (XX')ₜ with views
+    xt_view = @view Z_current[1:N]                    # view of the first N entries (xₜ|ₜ)
+    XtXt_prime_data = @view Z_current[N+1:end]        # view of the XX' data
+    XtXt_prime = reshape(XtXt_prime_data, N, N)       # reshape the view (no copy)
     
     # 3) implied_cov = (XX') - xₜ xₜ'
-    implied_cov = XtXt_prime - xt*xt'
+    # Need to materialize this for eigen decomposition
+    implied_cov = XtXt_prime - xt_view*xt_view'
     
     # 4) Eigen-decomposition to clamp negative eigenvalues
-    #    Use `Symmetric` or `Hermitian` to ensure real sym decomposition
-    eig_vals, eig_vecs = eigen(Symmetric(implied_cov))
+    #    Use `Symmetric` to ensure real sym decomposition
+    F = eigen(Symmetric(implied_cov))
+    eig_vals, eig_vecs = F.values, F.vectors
     
     # 5) Replace negative eigenvalues with 0 => PSD
     eig_vals .= max.(eig_vals, 0.0)
     
-    # 6) Reassemble the corrected block = V * diag(λ⁺) * V' + xₜ xₜ'
-    corrected = eig_vecs * Diagonal(eig_vals) * eig_vecs' + x_t*x_t'
+    # 6) Reassemble the corrected block more efficiently
+    corrected = similar(implied_cov)
+    mul!(corrected, eig_vecs, Diagonal(eig_vals))
+    mul!(XtXt_prime, corrected, eig_vecs')         
     
-    # 7) Write it back into the corresponding part of Z_tt
-    Z_tt[N+1:end, t + 1] = vec(corrected)
+    # 7) Add the outer product and write back
+    XtXt_prime .+= xt_view * xt_view'
     
     return nothing
 end
@@ -878,7 +903,7 @@ function correct_Z_tt(Z_tt::AbstractVector{T1}, model::QKModel{T,T2}, t::Int) wh
   implied_cov = Symmetric(XtXt_prime - xt * xt')  # Enforce symmetry for eigen
   
   # 4) Eigenvalue-based correction (AD-friendly)
-  F = LinearAlgebra.eigen(implied_cov)
+  F = LinearAlgebra.eigen(Symmetric(implied_cov))
   eigs_corrected = max.(F.values, zero(T))  # Clamp negative eigenvalues to 0
   corrected_cov = F.vectors * Diagonal(eigs_corrected) * F.vectors'
   
@@ -891,252 +916,29 @@ function correct_Z_tt(Z_tt::AbstractVector{T1}, model::QKModel{T,T2}, t::Int) wh
   return vcat(xt, vec(corrected_XX))
 end
 
-#Quadratic Kalman Filter
 """
-    qkf_filter!(data::QKData{T1,1}, model::QKModel{T,T2})
+    qkf_filter(data::QKData{T1,N}, model::QKModel{T,T2}) -> FilterOutput{T}
 
-Run the **Quadratic Kalman Filter (QKF)** on a time series of length `T̄`, modifying
-the result in-place.
-
-# Description
-
-This function implements a Kalman-like recursive filter where the state 
-vector `Zₜ` includes not only the usual mean component `xₜ` but also 
-terms for the second-moment `(x xᵀ)ₜ`, making it a *quadratic* extension. 
-At each time step, it performs:
-
-1. **State Prediction** (`predict_Z_ttm1!` / `predict_P_ttm1!`)
-2. **Measurement Prediction** (`predict_Y_ttm1!` / `predict_M_ttm1!`)
-3. **Kalman Gain Computation** (`compute_K_t!`)
-4. **State & Covariance Update** (`update_Z_tt!`, `update_P_tt!`)
-5. **PSD Correction** (`correct_Z_tt!`)
-6. **Log-Likelihood** computation for the current innovation.
-
-
-Unlike the non-mutating version (`qkf_filter`), this function reuses 
-and mutates internal arrays and data structures in-place, which can 
-improve performance and reduce memory allocations.
+Perform the Quadratic Kalman Filter (QKF) in a purely functional (non-mutating) manner.
 
 # Arguments
+- `data::QKData{T1,N}`: Observed data container.
+- `model::QKModel{T,T2}`: Model parameters and matrices.
 
-- `data::QKData{T1,1}`  
-  A structure holding:
-  - `Y::Vector{T1}` of length `T̄+1`, containing observations. 
-    Typically, `Y[1]` is an initial placeholder and `Y[2..end]` 
-    are the actual measurements.
-  - `T_bar::Int` the total number of time steps (excluding index 0).
-  - `M::Int` the dimension of the measurement at each time step.
-
-- `model::QKModel{T,T2}`  
-  A parameter structure holding:
-  - `N::Int`: State dimension (for the mean part).
-  - `P::Int`: Dimension of the augmented "quadratic" state 
-    (`P = N + N(N+1)/2`).
-  - `μ_aug, Σ_aug`: The unconditional mean and covariance used for 
-    initialization.
-  - Additional model matrices or functions (e.g., `Φ_aug`, `B_aug`, `A`, `V`) 
-    accessed via subroutines.
-
-# Return
-
-A named tuple with fields:
-
-- `ll_t::Vector{Float64}`  
-  The per-time-step log-likelihoods (size = `T̄`).
-- `Z_tt::Array{T,3}`  
-  The filtered state at each time step. Dimensions: `(T, P, T̄+1)` in your 
-  specific code (or `(P, T̄+1)` in a more generic version).
-- `Pₜₜ::Array{T,4}`  
-  The filtered state covariance array. Dimensions often `(T, P, P, T̄+1)` 
-  in your code.
-- `Yₜₜ₋₁::Vector{T}`  
-  The predicted measurement at each time step (size = `T̄`).
-- `M_ttm1::Array{T,4}`  
-  The predicted measurement covariance, dimensions `(T, M, M, T̄)`.
-- `K_t::Array{T,4}`  
-  The Kalman gain for each time step, `(T, P, M, T̄)`.
-- `Zₜₜ₋₁::Array{T,3}`  
-  One-step-ahead predicted states.
-- `Pₜₜ₋₁::Array{T,4}`  
-  One-step-ahead predicted covariances.
-- `Σ_ttm1::Array{T,4}`  
-  Any intermediate covariance terms used for prediction.
+# Returns
+- `FilterOutput{T}`: Struct containing filtered states (`Z_tt`), covariances (`P_tt`), predicted states (`Z_ttm1`), predicted covariances (`P_ttm1`), predicted measurements (`Y_ttm1`), measurement covariances (`M_ttm1`), Kalman gains (`K_t`), and log-likelihoods (`ll_t`).
 
 # Details
-
-1. **Initialization**: 
-   - `Z_tt[:, 1] .= μ̃ᵘ` and `P_tt[:,:,1] .= Σ̃ᵘ`.
-2. **Recursive Steps** (`for t in 1:T̄`):
-   - **Prediction**: `predict_Z_ttm1!` / `predict_P_ttm1!`.
-   - **Measurement**: `predict_Y_ttm1!` / `predict_M_ttm1!`.
-   - **Gain & Update**: `compute_K_t!`, then `update_Z_tt!` / `update_P_tt!`. 
-   - **Correction**: `correct_Z_tt!` clamps negative eigenvalues 
-     for PSD.
-   - **Likelihood**: `compute_loglik!` appends the log-likelihood.
-3. **Positive Semidefinite Correction**: 
-   - Negative eigenvalues introduced by approximation are set to zero.
-
-# Example
-
-```julia
-data = QKData(Y, M=measurement_dim, T̄=length(Y)-1)
-model = QKModel(...)
-result = qkf_filter!(data, model)
-
-@show result.ll_t
-@show result.Z_tt[:, end]   # final state
-```
+This function allocates new arrays at each step and does not mutate any input arrays. It is suitable for use with automatic differentiation frameworks or when immutability is desired.
 """
-function qkf_filter!(data::QKData{T1, 1},
-    model::QKModel{T,T2}) where {T1 <: Real, T <: Real, T2 <: Real}
-
-    @unpack T_bar, Y, M = data
-    @unpack N = model.state
-    @unpack aug_mean, aug_cov = model.moments
-    @unpack P = model.aug_state
-
-    # Predfine Matrix
-    Z_tt =  zeros(T, P, T_bar + 1)
-    Z_ttm1 = zeros(T, P, T_bar)
-    P_tt = zeros(T, P, P, T_bar + 1)
-    P_ttm1 = zeros(T, P, P, T_bar)
-    Sigma_ttm1 = zeros(T, P, P, T_bar)
-    #vecΣ_ttm1 = zeros(T, P^2, T_bar)
-    K_t = zeros(T, P, M, T_bar)
-    tmpP = zeros(T, P, P)
-    tmpB = zeros(T, M, P)
-    Y_ttm1 = zeros(T, M, T_bar)
-    M_ttm1 = zeros(T, M, M, T_bar)
-    tmpPB = zeros(T, P, M)
-    ll_t = zeros(Float64, T_bar)
-    tmp_eps = zeros(T, M)
-    tmpKM = zeros(T, P, M)
-    tmpKMK = zeros(T, P, P)
-
-    Y_t = Vector{T}(undef, T_bar)
-    copyto!(Y_t, 1, Y, 2, T_bar)
-
-    #Initalize: Z₀₀ = μ̃ᵘ, P₀₀ = Σ̃ᵘ
-    Z_tt[:, 1] .= aug_mean
-    P_tt[:, :, 1] .= aug_cov
-    
-    # Loop over time
-    for t in 1:T_bar
-
-        # State Prediction: Zₜₜ₋₁ = μ̃ + Φ̃Zₜ₋₁ₜ₋₁, Pₜₜ₋₁ = Φ̃Pₜ₋₁ₜ₋₁Φ̃' + Σ̃(Zₜ₋₁ₜ₋₁)
-        predict_Z_tt!(Z_tt, Z_ttm1, model, t)
-        predict_P_tt!(P_tt, P_ttm1, Sigma_ttm1, Z_tt, tmpP, model, t)
-
-        # Observation Prediction: Yₜₜ₋₁ = A + B̃Zₜₜ₋₁, Mₜₜ₋₁ = B̃Pₜₜ₋₁B̃' + V
-        predict_Y_ttm1!(Y_ttm1, Z_ttm1, Y, model, t)
-        predict_M_ttm1!(M_ttm1, P_ttm1, tmpB, model, t)
-
-        # Kalman Gain: Kₜ = Pₜₜ₋₁B̃′/Mₜₜ₋₁
-        compute_K_t!(K_t, P_ttm1, M_ttm1, tmpPB, model, t)
-
-        # Update States: Zₜₜ = Zₜₜ₋₁ + Kₜ(Yₜ - Yₜₜ₋₁); Pₜₜ = Pₜₜ₋₁ - KₜMₜₜ₋₁Kₜ'
-        update_Z_tt!(Z_tt, K_t, Y_t, Y_ttm1, Z_ttm1, t)
-        update_P_tt!(P_tt, K_t, P_ttm1, Z_ttm1, tmpKM, tmpKMK, model, t)
-
-        #Correct for update
-        correct_Z_tt!(Z_tt, model, t)
-
-        #Compute Log Likelihood
-        compute_loglik!(ll_t, Y_t, Y_ttm1, M_ttm1, t)
-    end
-
-    return FilterOutput(ll_t = ll_t, Z_tt = Z_tt, P_tt = P_tt,  Y_ttm1 = Y_ttm1, M_ttm1 = M_ttm1,
-        K_t = K_t, Z_ttm1 = Z_ttm1, P_ttm1 = P_ttm1, Sigma_ttm1 = Sigma_ttm1)
-
-end
-
-"""
-    qkf_filter(data::QKData{T1,1}, model::QKModel{T,T2})
-
-Run the **Quadratic Kalman Filter (QKF)** on a time series of length `T̄`, 
-returning a new set of result arrays (out-of-place).
-
-# Description
-
-This function implements the same *quadratic* Kalman filter recursion 
-as `qkf_filter!`, but instead of updating arrays in-place, it allocates 
-new arrays for predictions, updates, and outputs. This can be simpler to 
-use in contexts where you don't want to mutate or reuse `data` and `model`, 
-but it may be less memory-efficient for large-scale problems.
-
-At each time step, it performs:
-
-1. **State Prediction** (`predict_Z_tt` / `predict_P_tt`)
-2. **Measurement Prediction** (`predict_Y_tt` / `predict_M_ttm1`)
-3. **Kalman Gain Computation** (`compute_K_t`)
-4. **State & Covariance Update** (`update_Z_tt`, `update_P_tt`)
-5. **PSD Correction** (`correct_Zₜₜ`)
-6. **Log-Likelihood** computation.
-
-# Arguments
-
-- `data::QKData{T1,1}`  
-  Same structure as in `qkf_filter!`, with fields:
-  - `Y::Vector{T1}`, `T̄::Int`, `M::Int`.
-- `model::QKModel{T,T2}`  
-  Same parameter structure as in `qkf_filter!`, with fields:
-  - `N::Int`, `P::Int`, `μ̃ᵘ, Σ̃ᵘ`, etc.
-
-# Return
-
-A named tuple with fields:
-
-- `ll_t::Vector{Float64}`  
-  Per-time-step log-likelihoods (size = `T̄`).
-- `Z_tt::Array{T,3}`  
-  The filtered state at each time step (dimensions `(T, P, T̄+1)` in your usage).
-- `P_tt::Array{T,4}`  
-  The filtered state covariance array.
-- `Y_ttm1::Vector{T}`  
-  Predicted measurement for each step.
-- `M_ttm1::Array{T,4}`  
-  Predicted measurement covariances.
-- `K_t::Array{T,4}`  
-  The Kalman gain for each time step.
-- `Z_ttm1::Array{T,3}`  
-  One-step-ahead predicted states.
-- `P_ttm1::Array{T,4}`  
-  One-step-ahead predicted covariances.
-
-# Details
-
-1. **Initialization**:
-   - Creates new arrays for `Z_tt` and `P_tt` and sets the initial state 
-     to `aug_mean` and `aug_cov`.
-2. **Time Loop**: 
-   - **Prediction**: `predict_Z_tt`, `predict_P_tt`.
-   - **Measurement**: `predict_Y_tt`, `predict_M_ttm1`.
-   - **Gain & Update**: `compute_K_t`, `update_Z_tt`, `update_P_tt`.
-   - **Correction**: `correct_Z_tt` for PSD.
-   - **Likelihood**: `compute_loglik`.
-3. **No In-Place Mutation**:
-   - Each step returns fresh arrays; original inputs are not modified.
-
-# Example
-
-```julia
-data = QKData(Y, M=measurement_dim, T̄=length(Y)-1)
-model = QKModel(...)
-result = qkf_filter(data, model)
-
-@show result.ll_t
-@show result.Z_tt[:, end]   # final state
-```
-"""
-function qkf_filter(data::QKData{T1, N},
-    model::QKModel{T,T2}) where {T1 <: Real, T <: Real, T2 <: Real, N}
+function qkf_filter(data::QKData{T1,N}, model::QKModel{T,T2}) where {T1<:Real, T<:Real, T2<:Real, N}
     @unpack T_bar, Y, M = data
     @unpack aug_mean, aug_cov = model.moments
     @unpack P = model.aug_state
-    
+
     # Handle both vector and matrix Y inputs
     Y_concrete = if N == 1
-        Vector{T1}(vec(Y))  # Convert to vector if it's not already
+      Vector{T1}(vec(Y))  # Convert to vector if it's not already
     else
         Y  # Keep as matrix for N == 2
     end
@@ -1145,7 +947,7 @@ function qkf_filter(data::QKData{T1, N},
     else
         @view Y[:, 1:end]
     end
-
+    # Allocate arrays
     Z_tt = zeros(T, P, T_bar + 1)
     P_tt = zeros(T, P, P, T_bar + 1)
     Z_ttm1 = zeros(T, P, T_bar)
@@ -1159,185 +961,139 @@ function qkf_filter(data::QKData{T1, N},
     Z_tt[:, 1] = aug_mean
     P_tt[:, :, 1] = aug_cov
 
+    # Main filtering loop
     for t in 1:T_bar
+        # Predict state
         Z_ttm1[:, t] = predict_Z_ttm1(Z_tt[:, t], model)
+        
+        # Predict covariance
         P_ttm1[:, :, t] = predict_P_ttm1(P_tt[:, :, t], Z_tt[:, t], model, t)
 
+        # Predict measurement
         Y_ttm1[:, t] = predict_Y_ttm1(Z_ttm1, Y_t, model, t)
+        
+        # Predict measurement covariance
         M_ttm1[:, :, t] = predict_M_ttm1(P_ttm1[:, :, t], model)
 
+        # Compute Kalman gain
         K_t[:, :, t] = compute_K_t(P_ttm1[:, :, t], M_ttm1[:, :, t], model, t)
 
         # Handle different Y formats based on N
         Z_tt[:, t + 1] = update_Z_tt(K_t, Y_t, Y_ttm1, Z_ttm1, t)
+        
+        # Update covariance
         P_tt[:, :, t + 1] = update_P_tt(K_t[:, :, t], P_ttm1[:, :, t], Z_ttm1[:, t], model, t)
 
+        # PSD correction
         Z_tt[:, t + 1] = correct_Z_tt(Z_tt[:, t + 1], model, t)
 
+        # Compute log-likelihood
         ll_t[t] = compute_loglik(Y_t, Y_ttm1, M_ttm1, t)
     end
+
+    # Final log-likelihood at T̄
+    # Y_ttm1[:, T̄] = predict_Y_ttm1(Z_ttm1, Y, model, T̄)
+    # M_ttm1[:, :, T̄] = predict_M_ttm1(P_ttm1[:, :, T̄], model)
+    # ll_t[T̄] = compute_loglik(Y, Y_ttm1, M_ttm1, T̄)
 
     return FilterOutput(ll_t, Z_tt, P_tt, Y_ttm1, M_ttm1, K_t, Z_ttm1, P_ttm1)
 end
 
 """
-    qkf_filter!(data::QKData{T1,1}, model::QKModel{T,T2})
+    qkf_filter!(data::QKData{T}, model::QKModel{T,T2}) -> FilterOutput{T}
 
-Run the **Quadratic Kalman Filter (QKF)** on a time series of length `T̄`.
+Run the Quadratic Kalman Filter in-place on the given data and model.
 
-# Description
-
-This function implements a Kalman-like recursive filter where the state 
-vector `Z_t` includes not only the usual mean component `xₜ` but also 
-terms for the second-moment `(x xᵀ)ₜ`, making it a *quadratic* extension. 
-At each time step, it performs:
-
-1. **State Prediction** (`predict_Z_ttm1` / `predict_P_ttm1`)
-2. **Measurement Prediction** (`predict_Y_ttm1` / `predict_M_ttm1`)
-3. **Kalman Gain Computation** (`compute_K_t`)
-4. **State & Covariance Update** (`update_Zₜₜ!`, `update_Pₜₜ!`)
-5. **PSD Correction**: Ensures the implied covariance is positive semidefinite 
-   by clamping negative eigenvalues via `correct_Zₜₜ!`.
-6. **Log-Likelihood** computation for the current innovation.
-
-The filter stores and returns the entire history of filtered states, covariances,
-predicted measurements, and related arrays. 
+This is the fully mutating version of `qkf_filter` that uses in-place operations
+to minimize memory allocations.
 
 # Arguments
+- `data::QKData{T}`: Contains the observation data `Y` (M×T̄).
+- `model::QKModel{T,T2}`: Contains all model parameters.
 
-- `data::QKData{T1,1}`  
-  A structure holding:
-  - `Y::Vector{T1}` of length `T_bar+1`, which contains observations 
-    (`Y[1]` is unused or some initial placeholder, and `Y[2..end]` are the actual measurements).
-  - `T_bar::Int` the total number of time steps (excluding index 0).
-  - `M::Int` the dimension of the measurement at each time step.
-
-- `model::QKModel{T,T2}`  
-  A parameter structure holding:
-  - `N::Int`: State dimension (for the mean part).
-  - `P::Int`: Dimension of the augmented "quadratic" state vector 
-    (`P = N + N(N+1)/2`).
-  - `aug_mean, aug_cov`: The unconditional mean and covariance used for initialization.
-  - Additional model matrices or functions (e.g., `Phi_aug`, `B_aug`, `A`, `V`), 
-    typically accessed via separate predict/update subroutines.
-
-# Return
-
-A named tuple with fields:
-
-- `ll_t::Vector{Float64}`  
-  The per-time-step log-likelihoods of the innovations (size = `T_bar`).
-
-- `Z_tt::Matrix{T}`  
-  The updated ("filtered") state at each time step. Dimensions: `(P, T_bar+1)`, 
-  where column `k` corresponds to time index `k-1`.
-
-- `P_tt::Array{T,3}`  
-  The updated ("filtered") state covariance array (or the augmented second-moment 
-  representation) at each time step. Dimensions: `(P, P, T_bar+1`.
-
-- `Y_ttm1::Vector{T}`  
-  The predicted measurement at each time step (size = `T_bar`).
-
-- `M_ttm1::Array{T,3}`  
-  The predicted measurement covariance at each time step (dimensions: `(M, M, T_bar)`).
-
-- `K_t::Array{T,3}`  
-  The Kalman gain at each time step `(P, M, T_bar)`.
-
-- `Z_ttm1::Matrix{T}`  
-  The one-step-ahead predicted state (dimensions: `(P, T_bar)`).
-
-- `P_ttm1::Array{T,4}`  
-  The one-step-ahead predicted covariance (dimensions: `(P, P, T_bar)`).
-
-- `Σ_ttm1::Array{T,4}`  
-  Any intermediate state-dependent covariance terms added during prediction 
-  (dimensions: `(P, P, T_bar)`).
+# Returns
+- `FilterOutput{T}`: A struct containing all filter results:
+  - `Z_tt`: Filtered state estimates (P×T̄)
+  - `P_tt`: Filtered covariance matrices (P×P×T̄)
+  - `Z_ttm1`: Predicted state estimates (P×T̄)
+  - `P_ttm1`: Predicted covariance matrices (P×P×T̄)
+  - `Y_ttm1`: Predicted observations (M×T̄)
+  - `M_ttm1`: Predicted observation covariances (M×M×T̄)
+  - `K_t`: Kalman gain matrices (P×M×T̄)
+  - `ll_t`: Log-likelihood at each time step (T̄)
 
 # Details
+This function performs the full QKF algorithm using in-place operations:
+1. Initialize state and covariance
+2. For each time step:
+   - Predict state and covariance
+   - Predict measurement and its covariance
+   - Compute Kalman gain
+   - Update state and covariance
+   - Apply PSD correction
+   - Compute log-likelihood
+3. Return all results
 
-1. **Initialization**:  
-   - `Z_tt[:,1] .= aug_mean` and `P_tt[:,:,1] .= aug_cov`, representing the state at time 0.
-
-2. **Time Loop** (`for t in 1:T_bar`):  
-   - **Predict** step: 
-     - `predict_Z_ttm1` sets `Z_ttm1[:,t]` from `Z_tt[:,t]`.
-     - `predict_P_ttm1` sets `P_ttm1[:,:,t]` from `P_tt[:,:,t]`.
-   - **Measurement** step: 
-     - `predict_Y_ttm1` computes `Y_ttm1[t]` from `Z_ttm1[:,t]`.
-     - `predict_M_ttm1` updates `M_ttm1[:,:,t]`.
-   - **Gain & Update**:
-     - `compute_K_t` obtains the Kalman gain `K_t[:,:,t]`.
-     - `update_Z_tt` and `update_P_tt` yield the next `Z_tt[:,t+1]` and `P_tt[:,:,t+1]`.
-   - **Correction**:  
-     - `correct_Z_tt` clamps negative eigenvalues in the implied covariance portion 
-       of `Z_tt` to ensure PSD. 
-   - **Likelihood**:
-     - `compute_loglik` appends/logs the innovation-based log-likelihood 
-       in `ll_t[t]`.
-
-3. **Positive Semidefinite Correction**:
-   - Because the filter tracks `[X Xᵀ] - X Xᵀᵀ` as a covariance block, it can 
-     become indefinite due to linearization or numerical issues. We enforce 
-     PSD by zeroing out negative eigenvalues in `correct_Z_tt`.
-   - This step is not strictly differentiable at eigenvalues crossing zero. 
-     If you need AD through the filter, consider an alternative correction 
-     or a custom adjoint.
-
-# Example
-
-```julia
-data = QKData(Y, M=measurement_dim, T_bar=length(Y)-1)
-model = QKModel( ... )   # set up your model
-
-result = qkf_filter!(data, model)
-
-@show result.ll_t
-@show result.Z_tt[:, end]   # final state vector
+This version is optimized for performance by using in-place operations.
 """
-function qkf_filter!(data::QKData{T, 2}, model::QKModel{T,T2}) where {T <: Real, T2 <: Real}
+function qkf_filter!(data::QKData{T}, model::QKModel{T,T2}) where {T <: Real, T2 <: Real}
+    @unpack Y = data
+    T̄ = size(Y, 2)
+    P = size(model.aug_state.Phi_aug, 1)
+    M = size(Y, 1)
 
-    @unpack T_bar, Y, M = data
-    @unpack N = model.state
-    @unpack P = model.aug_state
-    @unpack aug_mean, aug_cov = model.moments
-
-    # Predfine Matrix
-    Z_tt = Matrix{<:Real}(undef, P, T_bar + 1)
-    P_tt = Array{T, 3}(undef, P, P, T_bar + 1)
-    Z_ttm1 = Matrix{<:Real}(undef, P, T_bar)
-    P_ttm1 = Array{T, 3}(undef, P, P, T_bar)
-    K_t = Array{T, 3}(undef, P, M, T_bar)
-    Y_ttm1 = Vector{<:Real}(undef, T_bar)
-    M_ttm1 = Array{T, 3}(undef, M, M, T_bar)
-    ll_t = Vector{<:Real}(undef, T_bar)
-
-    #Initalize: Z₀₀ = μ̃ᵘ, P₀₀ = Σ̃ᵘ
-    Z_tt[:, 1] = aug_mean
-    P_tt[:, :, 1] = aug_cov
+    # Allocate arrays for filter results
+    Z_tt = zeros(T, P, T̄)
+    P_tt = zeros(T, P, P, T̄)
+    Z_ttm1 = zeros(T, P, T̄)
+    P_ttm1 = zeros(T, P, P, T̄)
+    Y_ttm1 = zeros(T, M, T̄)
+    M_ttm1 = zeros(T, M, M, T̄)
+    K_t = zeros(T, P, M, T̄)
+    ll_t = zeros(T, T̄)
     
-    # Loop over time
-    for t in 1:T_bar
-        Z_ttm1[:, t] = predict_Z_ttm1(Z_tt[:, t], model)
-        P_ttm1[:, :, t] = predict_P_ttm1(P_tt[:, :, t], Z_tt[:, t], model, t)
+    # Temporary storage for computations
+    Σ_ttm1 = zeros(T, P, P, T̄)
+    tmpP = zeros(T, P, P)
 
-        Y_ttm1[t] = predict_Y_ttm1(Z_ttm1[:, t], Y, model, t)
-        M_ttm1[:, :, t] = predict_M_ttm1(P_ttm1[:, :, t], model)
+    # Initialize state and covariance (assuming initial conditions are provided in model)
+    Z_tt[:, 1] = model.init.Z0
+    P_tt[:, :, 1] = model.init.P0
 
-        K_t[:, :, t] = compute_K_t(P_ttm1[:, :, t], M_ttm1[:, :, t], model, t)
+    # Main filtering loop
+    for t in 1:T̄-1
+        # Predict state
+        predict_Z_ttm1!(Z_tt, Z_ttm1, model, t)
 
-        Z_tt[:, t + 1] = update_Z_tt(K_t[:, :, t], Y, Y_ttm1, Z_ttm1, t)
-        P_tt[:, :, t + 1] = update_P_tt(K_t[:, :, t], P_ttm1[:, :, t], Z_ttm1[:, t], model, t)
+        # Predict covariance
+        predict_P_ttm1!(P_tt, P_ttm1, Σ_ttm1, Z_tt, tmpP, model, t)
 
-        Z_tt[:, t + 1] = correct_Z_tt(Z_tt[:, t + 1], model, t)
+        # Predict measurement
+        predict_Y_ttm1!(Z_ttm1, Y_ttm1, Y, model, t)
 
-        ll_t[t] = compute_loglik(Y, Y_ttm1, M_ttm1, t)
+        # Predict measurement covariance
+        predict_M_ttm1!(P_ttm1, M_ttm1, model, t)
+
+        # Compute Kalman gain
+        compute_K_t!(P_ttm1, M_ttm1, K_t, model, t)
+
+        # Update state
+        update_Z_tt!(K_t, Y, Y_ttm1, Z_ttm1, Z_tt, t)
+
+        # Update covariance
+        update_P_tt!(K_t, P_ttm1, P_tt, Z_ttm1, model, t)
+
+        # PSD correction
+        correct_Z_tt!(Z_tt, model, t)
+
+        # Compute log-likelihood
+        ll_t[t] = compute_loglik(Y[:, t], Y_ttm1[:, t], M_ttm1[:, :, t])
     end
 
-    return FilterOutput(ll_t = ll_t, Z_tt = Z_tt, P_tt = P_tt,  Y_ttm1 = Y_ttm1, M_ttm1 = M_ttm1,
-        K_t = K_t, Z_ttm1 = Z_ttm1, P_ttm1 = P_ttm1)
+    # Final log-likelihood at T̄
+    predict_Y_ttm1!(Z_ttm1, Y_ttm1, Y, model, T̄)
+    predict_M_ttm1!(P_ttm1, M_ttm1, model, T̄)
+    ll_t[T̄] = compute_loglik(Y[:, T̄], Y_ttm1[:, T̄], M_ttm1[:, :, T̄])
 
+    return FilterOutput(Z_tt, P_tt, Z_ttm1, P_ttm1, Y_ttm1, M_ttm1, K_t, ll_t)
 end
-
-#export qkf_filter, qkf_filter!

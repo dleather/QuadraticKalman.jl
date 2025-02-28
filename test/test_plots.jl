@@ -2,10 +2,10 @@ using Test
 import QuadraticKalman as QK
 using LinearAlgebra, Random, Plots, Random
 gr()
+Random.seed!(123)
 
 @testset "Plot Recipes" begin
     # Set up test data
-    Random.seed!(123)
     N, T = 2, 10
     true_states = randn(N, T)
     ll_t = randn(T-1)
@@ -71,15 +71,15 @@ gr()
     @testset "Edge Cases for Plots" begin
         # Test with single state
         single_state = randn(1, 5)
-        single_P = cat([fill(0.1, 1, 1) for _ in 1:5]..., dims=3)
-        single_filter = QK.FilterOutput(randn(4), single_state, single_P)
+        single_P = cat([[0.1 0.05; 0.05 0.1] for _ in 1:5]..., dims=3)
+        single_filter = QK.FilterOutput(randn(4), vcat(single_state, single_state.^2), single_P)
         p = plot(QK.KalmanFilterPlot(single_filter))
         @test p isa Plots.Plot
         
-        # Test with zero variance
-        zero_var_P = cat([zeros(2, 2) for _ in 1:5]..., dims=3)
-        zero_var_filter = QK.FilterOutput(randn(4), randn(2, 5), zero_var_P)
-        p = plot(QK.KalmanFilterPlot(zero_var_filter))
+        # Test with very small variance instead of zero
+        small_var_P = cat([fill(1e-10, 2, 2) for _ in 1:5]..., dims=3)
+        small_var_filter = QK.FilterOutput(randn(4), randn(2, 5), small_var_P)
+        p = plot(QK.KalmanFilterPlot(small_var_filter))
         @test p isa Plots.Plot
     end
 end

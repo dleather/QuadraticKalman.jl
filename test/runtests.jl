@@ -26,6 +26,7 @@ using Aqua, Plots
     include("test_likelihood_edge_cases.jl")
     include("test_logpdf_mvn.jl")
     include("test_qkf_negloglik.jl")
+    include("test_mutating_filter.jl")
     include("test_end_to_end.jl")
     try
         include("test_r_comparison.jl")  # If you have R-based comparisons

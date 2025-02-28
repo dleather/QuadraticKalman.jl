@@ -54,6 +54,7 @@ number of time periods minus 1 (due to the autoregressive structure of the model
 """
 @with_kw struct QKData{T<:Real, N}
     Y::AbstractArray{T, N}  # Data array
+    @assert !any(isnan, Y) "Input data contains NaN values"
     M::Int                  # Number of observed variables
     T_bar::Int              # Number of time periods minus 1
 end
@@ -78,9 +79,9 @@ For matrix input (N=2):
   - T_bar is second dimension size minus 1
 """
 function QKData(Y::AbstractArray{T, N}) where {T<:Real, N}
-    if any(isnan, Y)
-        throw(ArgumentError("Input data contains NaN values"))
-    end
+    # if any(isnan, Y)
+    #     throw(ArgumentError("Input data contains NaN values"))
+    # end
     if N == 1   # ...data is univariate...
         M = 1
         Tp1 = length(Y)
@@ -109,12 +110,12 @@ Validate dimensions and properties of QKData structure.
 function validate_data(data::QKData{T,N}) where {T<:Real, N}
     @unpack Y, M, T_bar = data
     
-    # Check not empty - this is fine for AD since it's just array size
+    # Check not empty
     if isempty(Y)
         throw(ArgumentError("Data array Y cannot be empty"))
     end
     
-    # Dimension checks are fine for AD since they're just array sizes
+    # Dimension checks
     if N == 1
         if length(Y) ≤ 1
             throw(ArgumentError("Data must have more than one observation"))
@@ -137,8 +138,12 @@ function validate_data(data::QKData{T,N}) where {T<:Real, N}
         end
     end
     
-    # Instead of isfinite check, we can do something like this:
-    # This avoids non-differentiable functions while still catching NaN/Inf
+    # Check for NaN values in the data
+    if any(isnan, Y)
+        throw(ArgumentError("Data contains NaN values"))
+    end
+    
+    # Existing check: Ensure values are within a finite range
     for y in Y
         if abs(y) > 1e10    # Use a large but finite number
             throw(ArgumentError("Data values must be finite"))

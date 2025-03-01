@@ -501,7 +501,7 @@ Compute the augmented observation matrix B̃ for scalar case.
   into the observation space
 """
 function compute_B_aug(B::Real, C::Real)
-    return [B`` C]
+    return [B C]
 end
 
 """

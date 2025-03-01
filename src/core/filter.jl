@@ -170,11 +170,11 @@ Also updates or uses `Σ_ttm1[:,:,t]` as needed.
 This is typically used in the predict step of the QKF for covariance.
 
 """
-function predict_P_ttm1!(P_tt::AbstractArray{Real,3}, P_ttm1::AbstractArray{Real,3},
-    Σ_ttm1::AbstractArray{Real,3}, Z_tt::AbstractMatrix{T}, tmpP::AbstractMatrix{T}, 
+function predict_P_ttm1!(P_tt::AbstractArray{T,3}, P_ttm1::AbstractArray{T,3},
+    Σ_ttm1::AbstractArray{T,3}, Z_tt::AbstractMatrix{T}, tmpP::AbstractMatrix{T}, 
     model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
 
-    # 1) Update Σₜₜ₋₁ based on Zₜₜ (the code snippet calls compute_Σₜₜ₋₁!)
+    # 1) Update Σₜₜ₋₁ based on Zₜₜ (call the function with capital Sigma)
     compute_Sigma_ttm1!(Σ_ttm1, Z_tt, model, t)
 
     # 2) Build predicted covariance using views
@@ -638,7 +638,7 @@ function update_Z_tt!(
     t::Int) where {T<:Real}
 
     # Core linear update
-    view(Z_tt, :, t+1) .= view(Z_ttm1, :, t) .+ view(K_t, :, :, t) * (view(Y, :, t) .- view(Y_ttm1, :, t))
+    view(Z_tt, :, t+1) .= view(Z_ttm1, :, t) .+ view(K_t, :, :, t) * (view(Y, :, t + 1) .- view(Y_ttm1, :, t))
 end
 
 """
@@ -729,10 +729,10 @@ covariance `P_ttm1[:, :, t]`, and the Kalman gain `K_t[:, :, t]`.
    make_positive_definite. If your AD can handle in-place modifications, or you define a
    custom adjoint, it should be fine. Otherwise, consider a purely functional approach.
 """
-function update_P_tt!(P_tt::AbstractArray{Real,3}, K_t::AbstractArray{Real,3},
-    P_ttm1::AbstractArray{Real,3},
-    Z_ttm1::AbstractArray{Real,2}, tmpKM::AbstractMatrix{Real},
-    tmpKMK::AbstractMatrix{Real}, model::QKModel{T,T2}, t::Int ) where {T<:Real, T2<:Real}
+function update_P_tt!(P_tt::AbstractArray{T1,3}, K_t::AbstractArray{T1,3},
+    P_ttm1::AbstractArray{T1,3},
+    Z_ttm1::AbstractMatrix{T1}, tmpKM::AbstractMatrix{T1},
+    tmpKMK::AbstractMatrix{T1}, model::QKModel{T,T2}, t::Int) where {T1<:Real, T<:Real, T2<:Real}
     @unpack V = model.meas
     @unpack B_aug = model.aug_state
     
@@ -742,17 +742,23 @@ function update_P_tt!(P_tt::AbstractArray{Real,3}, K_t::AbstractArray{Real,3},
     local P_tt_dest = view(P_tt, :, :, t+1)
     
     # 2) Form A = I - K_slice*B_aug
-    mul!(tmpKM, K_slice, B_aug)  # Use provided temporary matrix
-    A = I - tmpKM
+    # Create identity matrix of appropriate size
+    P = size(K_slice, 1)
+    A = Matrix{T1}(I, P, P)
+    mul!(tmpKM, K_slice, B_aug)  # tmpKM = K_slice * B_aug
+    A .-= tmpKM  # A = I - tmpKM
     
     # 3) Compute A * P_ttm1_view * A' efficiently
     mul!(tmpKMK, A, P_ttm1_view)  # tmpKMK = A * P_ttm1_view
     mul!(P_tt_dest, tmpKMK, A')   # P_tt_dest = tmpKMK * A'
     
-    # 4) Add the K*V*K' term
-    mul!(tmpKMK, K_slice, V)      # tmpKMK = K_slice * V
-    mul!(tmpKM, tmpKMK, K_slice') # tmpKM = tmpKMK * K_slice'
-    P_tt_dest .+= tmpKM           # Add to result
+    # 4) Add the K*V*K' term - MODIFIED TO FIX DIMENSION MISMATCH
+    # First compute KV directly - K_slice is P×M, V is M×M, result is P×M
+    KV = K_slice * V  # Temporary allocation, but avoids dimension issues
+    
+    # Then compute KV*K' to get P×P result
+    mul!(tmpKM, KV, K_slice')  # tmpKM = KV * K_slice'
+    P_tt_dest .+= tmpKM        # Add to result
     
     # 5) Ensure positive-definiteness
     P_tt_dest .= make_positive_definite(P_tt_dest)
@@ -849,7 +855,7 @@ function correct_Z_tt!(Z_tt::AbstractMatrix{T1}, model::QKModel{T, T2}, t::Int) 
     
     # 4) Eigen-decomposition to clamp negative eigenvalues
     #    Use `Symmetric` to ensure real sym decomposition
-    F = eigen(Symmetric(implied_cov))
+    F = LinearAlgebra.eigen(Symmetric(implied_cov))
     eig_vals, eig_vecs = F.values, F.vectors
     
     # 5) Replace negative eigenvalues with 0 => PSD
@@ -1037,63 +1043,67 @@ This function performs the full QKF algorithm using in-place operations:
 This version is optimized for performance by using in-place operations.
 """
 function qkf_filter!(data::QKData{T}, model::QKModel{T,T2}) where {T <: Real, T2 <: Real}
-    @unpack Y = data
-    T̄ = size(Y, 2)
-    P = size(model.aug_state.Phi_aug, 1)
-    M = size(Y, 1)
+  @unpack Y = data
+  T̄ = size(Y, 2)                # Number of time steps
+  P = size(model.aug_state.Phi_aug, 1)  # Augmented state dimension
+  M = size(Y, 1)                # Measurement dimension
 
-    # Allocate arrays for filter results
-    Z_tt = zeros(T, P, T̄)
-    P_tt = zeros(T, P, P, T̄)
-    Z_ttm1 = zeros(T, P, T̄)
-    P_ttm1 = zeros(T, P, P, T̄)
-    Y_ttm1 = zeros(T, M, T̄)
-    M_ttm1 = zeros(T, M, M, T̄)
-    K_t = zeros(T, P, M, T̄)
-    ll_t = zeros(T, T̄)
-    
-    # Temporary storage for computations
-    Σ_ttm1 = zeros(T, P, P, T̄)
-    tmpP = zeros(T, P, P)
+  # Allocate arrays for filter results
+  Z_tt = zeros(T, P, T̄)
+  P_tt = zeros(T, P, P, T̄)
+  Z_ttm1 = zeros(T, P, T̄ - 1)
+  P_ttm1 = zeros(T, P, P, T̄ - 1)
+  Y_ttm1 = zeros(T, M, T̄ - 1)
+  M_ttm1 = zeros(T, M, M, T̄ - 1)
+  K_t = zeros(T, P, M, T̄ - 1)
+  ll_t = zeros(T, T̄ - 1)
+  
+  # Temporary storage for computations
+  Sigma_ttm1  = zeros(T, P, P, T̄ - 1)
+  tmpP    = zeros(T, P, P)      # Used by predict_P_ttm1!
+  
+  # NEW scratch buffers for update_P_tt!
+  # tmpKM  -> (P×M) scratch
+  # tmpKMK -> (P×P) scratch
+  tmpKM   = zeros(T, P, P)
+  tmpKMK  = zeros(T, P, P)
+  tmpB    = zeros(T, M, P)
 
-    # Initialize state and covariance (assuming initial conditions are provided in model)
-    Z_tt[:, 1] = model.init.Z0
-    P_tt[:, :, 1] = model.init.P0
+  # Initialize state and covariance (assuming initial conditions are in `model.init`)
+  Z_tt[:, 1] .= model.moments.aug_mean
+  P_tt[:, :, 1] .= model.moments.aug_cov
 
-    # Main filtering loop
-    for t in 1:T̄-1
-        # Predict state
-        predict_Z_ttm1!(Z_tt, Z_ttm1, model, t)
+  # Main filtering loop
+  for t in 1:(T̄-1)
+      # (1) Predict state
+      predict_Z_ttm1!(Z_tt, Z_ttm1, model, t)
 
-        # Predict covariance
-        predict_P_ttm1!(P_tt, P_ttm1, Σ_ttm1, Z_tt, tmpP, model, t)
+      # (2) Predict covariance
+      predict_P_ttm1!(P_tt, P_ttm1, Sigma_ttm1, Z_tt, tmpP, model, t)
 
-        # Predict measurement
-        predict_Y_ttm1!(Z_ttm1, Y_ttm1, Y, model, t)
+      # (3) Predict measurement
+      predict_Y_ttm1!(Y_ttm1, Z_ttm1, Y, model, t)
 
-        # Predict measurement covariance
-        predict_M_ttm1!(P_ttm1, M_ttm1, model, t)
+      # (4) Predict measurement covariance
+      predict_M_ttm1!(M_ttm1, P_ttm1, tmpB, model, t)
 
-        # Compute Kalman gain
-        compute_K_t!(P_ttm1, M_ttm1, K_t, model, t)
+      # (5) Compute Kalman gain
+      compute_K_t!(K_t, P_ttm1, M_ttm1, tmpB, model, t)
 
-        # Update state
-        update_Z_tt!(K_t, Y, Y_ttm1, Z_ttm1, Z_tt, t)
+      # (6) Update state - updates at t+1
+      update_Z_tt!(Z_tt, K_t, Y, Y_ttm1, Z_ttm1, t)
 
-        # Update covariance
-        update_P_tt!(K_t, P_ttm1, P_tt, Z_ttm1, model, t)
+      # (7) Update covariance (using extra scratch buffers) - updates at t+1
+      update_P_tt!(P_tt, K_t, P_ttm1, Z_ttm1, tmpKM, tmpKMK, model, t)
 
-        # PSD correction
-        correct_Z_tt!(Z_tt, model, t)
+      # (8) PSD correction on the augmented state - updates at t+1
+      correct_Z_tt!(Z_tt, model, t)
 
-        # Compute log-likelihood
-        ll_t[t] = compute_loglik(Y[:, t], Y_ttm1[:, t], M_ttm1[:, :, t])
-    end
+      # (9) Compute log-likelihood for this step
+      compute_loglik!(ll_t, Y, Y_ttm1, M_ttm1, t)
+  end
 
-    # Final log-likelihood at T̄
-    predict_Y_ttm1!(Z_ttm1, Y_ttm1, Y, model, T̄)
-    predict_M_ttm1!(P_ttm1, M_ttm1, model, T̄)
-    ll_t[T̄] = compute_loglik(Y[:, T̄], Y_ttm1[:, T̄], M_ttm1[:, :, T̄])
-
-    return FilterOutput(Z_tt, P_tt, Z_ttm1, P_ttm1, Y_ttm1, M_ttm1, K_t, ll_t)
+  # Return a FilterOutput (or similar) for convenience
+  return FilterOutput(ll_t, Z_tt, P_tt, Y_ttm1, M_ttm1, K_t, Z_ttm1, P_ttm1)
 end
+

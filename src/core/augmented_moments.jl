@@ -556,7 +556,7 @@ given information up to time t-1.
 Updates the slice Sigma_ttm1[:,:,t] with the conditional covariance computed using the 
 augmented state vector at time t and model parameters.
 """
-function compute_Sigma_ttm1!(Sigma_ttm1::AbstractArray{Real, 3}, Z_tt::AbstractMatrix{T},
+function compute_Sigma_ttm1!(Sigma_ttm1::AbstractArray{T, 3}, Z_tt::AbstractMatrix{T},
     model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
     @unpack mu, Sigma, Phi, N = model.state
     @unpack Lambda, L1, L2, L3, P, Phi_aug = model.aug_state

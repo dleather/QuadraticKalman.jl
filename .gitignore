@@ -7,3 +7,5 @@
 scratch/
 README_files/
 !README.md
+codeweaver/
+run_codeweaver.bat

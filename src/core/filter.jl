@@ -1006,6 +1006,99 @@ function qkf_filter(data::QKData{T1,N}, model::QKModel{T,T2}) where {T1<:Real, T
 end
 
 """
+    _qkf_filter_impl!(
+        Z_tt, P_tt, Z_ttm1, P_ttm1, 
+        Y_ttm1, M_ttm1, K_t, ll_t,
+        Sigma_ttm1, tmpP, tmpKM, tmpKMK, tmpB,
+        data, model
+    ) -> Nothing
+
+Low-level implementation of the Quadratic Kalman Filter (QKF) that performs in-place operations
+with user-provided storage arrays.
+
+# Arguments
+- `Z_tt::AbstractMatrix{T}`: Preallocated (P×T̄) matrix for filtered states.
+- `P_tt::AbstractArray{T,3}`: Preallocated (P×P×T̄) array for filtered covariances.
+- `Z_ttm1::AbstractMatrix{T}`: Preallocated (P×(T̄-1)) matrix for predicted states.
+- `P_ttm1::AbstractArray{T,3}`: Preallocated (P×P×(T̄-1)) array for predicted covariances.
+- `Y_ttm1::AbstractMatrix{T}`: Preallocated (M×(T̄-1)) matrix for predicted measurements.
+- `M_ttm1::AbstractArray{T,3}`: Preallocated (M×M×(T̄-1)) array for predicted measurement covariances.
+- `K_t::AbstractArray{T,3}`: Preallocated (P×M×(T̄-1)) array for Kalman gains.
+- `ll_t::AbstractVector{T}`: Preallocated vector of length (T̄-1) for log-likelihoods.
+- `Sigma_ttm1::AbstractArray{T,3}`: Preallocated (P×P×(T̄-1)) array for state-dependent noise terms.
+- `tmpP::AbstractMatrix{T}`: Scratch buffer of size (P×P).
+- `tmpKM::AbstractMatrix{T}`: Scratch buffer of size (P×P).
+- `tmpKMK::AbstractMatrix{T}`: Scratch buffer of size (P×P).
+- `tmpB::AbstractMatrix{T}`: Scratch buffer of size (M×P).
+- `data::QKData{T}`: Contains the observation data `Y` (M×T̄).
+- `model::QKModel{T,T2}`: Contains all model parameters.
+
+# Details
+This is an internal, low-level function that performs the QKF algorithm with zero allocations.
+All storage arrays must be preallocated and passed in by the caller. This allows for maximum 
+performance in repeated calls or integration with optimization routines.
+
+The function writes results directly into the provided arrays and returns nothing.
+"""
+function _qkf_filter_impl!(
+    Z_tt::AbstractMatrix{T}, 
+    P_tt::AbstractArray{T,3}, 
+    Z_ttm1::AbstractMatrix{T}, 
+    P_ttm1::AbstractArray{T,3},
+    Y_ttm1::AbstractMatrix{T}, 
+    M_ttm1::AbstractArray{T,3}, 
+    K_t::AbstractArray{T,3}, 
+    ll_t::AbstractVector{T},
+    Sigma_ttm1::AbstractArray{T,3}, 
+    tmpP::AbstractMatrix{T}, 
+    tmpKM::AbstractMatrix{T}, 
+    tmpKMK::AbstractMatrix{T}, 
+    tmpB::AbstractMatrix{T},
+    data::QKData{T}, 
+    model::QKModel{T,T2}
+) where {T <: Real, T2 <: Real}
+    
+    @unpack Y = data
+    T̄ = size(Y, 2)  # Number of time steps
+
+    # Initialize state and covariance
+    Z_tt[:, 1] .= model.moments.aug_mean
+    P_tt[:, :, 1] .= model.moments.aug_cov
+
+    # Main filtering loop
+    for t in 1:(T̄-1)
+        # (1) Predict state
+        predict_Z_ttm1!(Z_tt, Z_ttm1, model, t)
+
+        # (2) Predict covariance
+        predict_P_ttm1!(P_tt, P_ttm1, Sigma_ttm1, Z_tt, tmpP, model, t)
+
+        # (3) Predict measurement
+        predict_Y_ttm1!(Y_ttm1, Z_ttm1, Y, model, t)
+
+        # (4) Predict measurement covariance
+        predict_M_ttm1!(M_ttm1, P_ttm1, tmpB, model, t)
+
+        # (5) Compute Kalman gain
+        compute_K_t!(K_t, P_ttm1, M_ttm1, tmpB, model, t)
+
+        # (6) Update state - updates at t+1
+        update_Z_tt!(Z_tt, K_t, Y, Y_ttm1, Z_ttm1, t)
+
+        # (7) Update covariance (using extra scratch buffers) - updates at t+1
+        update_P_tt!(P_tt, K_t, P_ttm1, Z_ttm1, tmpKM, tmpKMK, model, t)
+
+        # (8) PSD correction on the augmented state - updates at t+1
+        correct_Z_tt!(Z_tt, model, t)
+
+        # (9) Compute log-likelihood for this step
+        compute_loglik!(ll_t, Y, Y_ttm1, M_ttm1, t)
+    end
+    
+    return nothing
+end
+
+"""
     qkf_filter!(data::QKData{T}, model::QKModel{T,T2}) -> FilterOutput{T}
 
 Run the Quadratic Kalman Filter in-place on the given data and model.
@@ -1041,69 +1134,42 @@ This function performs the full QKF algorithm using in-place operations:
 3. Return all results
 
 This version is optimized for performance by using in-place operations.
+
+For power users who need full control over memory allocation, see the internal
+`_qkf_filter_impl!` function.
 """
 function qkf_filter!(data::QKData{T}, model::QKModel{T,T2}) where {T <: Real, T2 <: Real}
-  @unpack Y = data
-  T̄ = size(Y, 2)                # Number of time steps
-  P = size(model.aug_state.Phi_aug, 1)  # Augmented state dimension
-  M = size(Y, 1)                # Measurement dimension
+    @unpack Y = data
+    T̄ = size(Y, 2)                # Number of time steps
+    P = size(model.aug_state.Phi_aug, 1)  # Augmented state dimension
+    M = size(Y, 1)                # Measurement dimension
 
-  # Allocate arrays for filter results
-  Z_tt = zeros(T, P, T̄)
-  P_tt = zeros(T, P, P, T̄)
-  Z_ttm1 = zeros(T, P, T̄ - 1)
-  P_ttm1 = zeros(T, P, P, T̄ - 1)
-  Y_ttm1 = zeros(T, M, T̄ - 1)
-  M_ttm1 = zeros(T, M, M, T̄ - 1)
-  K_t = zeros(T, P, M, T̄ - 1)
-  ll_t = zeros(T, T̄ - 1)
-  
-  # Temporary storage for computations
-  Sigma_ttm1  = zeros(T, P, P, T̄ - 1)
-  tmpP    = zeros(T, P, P)      # Used by predict_P_ttm1!
-  
-  # NEW scratch buffers for update_P_tt!
-  # tmpKM  -> (P×M) scratch
-  # tmpKMK -> (P×P) scratch
-  tmpKM   = zeros(T, P, P)
-  tmpKMK  = zeros(T, P, P)
-  tmpB    = zeros(T, M, P)
+    # Allocate arrays for filter results
+    Z_tt = zeros(T, P, T̄)
+    P_tt = zeros(T, P, P, T̄)
+    Z_ttm1 = zeros(T, P, T̄ - 1)
+    P_ttm1 = zeros(T, P, P, T̄ - 1)
+    Y_ttm1 = zeros(T, M, T̄ - 1)
+    M_ttm1 = zeros(T, M, M, T̄ - 1)
+    K_t = zeros(T, P, M, T̄ - 1)
+    ll_t = zeros(T, T̄ - 1)
+    
+    # Temporary storage for computations
+    Sigma_ttm1 = zeros(T, P, P, T̄ - 1)
+    tmpP = zeros(T, P, P)      # Used by predict_P_ttm1!
+    tmpKM = zeros(T, P, P)     # Used by update_P_tt!
+    tmpKMK = zeros(T, P, P)    # Used by update_P_tt!
+    tmpB = zeros(T, M, P)      # Used by predict_M_ttm1! and compute_K_t!
 
-  # Initialize state and covariance (assuming initial conditions are in `model.init`)
-  Z_tt[:, 1] .= model.moments.aug_mean
-  P_tt[:, :, 1] .= model.moments.aug_cov
+    # Call the low-level implementation function
+    _qkf_filter_impl!(
+        Z_tt, P_tt, Z_ttm1, P_ttm1, 
+        Y_ttm1, M_ttm1, K_t, ll_t,
+        Sigma_ttm1, tmpP, tmpKM, tmpKMK, tmpB,
+        data, model
+    )
 
-  # Main filtering loop
-  for t in 1:(T̄-1)
-      # (1) Predict state
-      predict_Z_ttm1!(Z_tt, Z_ttm1, model, t)
-
-      # (2) Predict covariance
-      predict_P_ttm1!(P_tt, P_ttm1, Sigma_ttm1, Z_tt, tmpP, model, t)
-
-      # (3) Predict measurement
-      predict_Y_ttm1!(Y_ttm1, Z_ttm1, Y, model, t)
-
-      # (4) Predict measurement covariance
-      predict_M_ttm1!(M_ttm1, P_ttm1, tmpB, model, t)
-
-      # (5) Compute Kalman gain
-      compute_K_t!(K_t, P_ttm1, M_ttm1, tmpB, model, t)
-
-      # (6) Update state - updates at t+1
-      update_Z_tt!(Z_tt, K_t, Y, Y_ttm1, Z_ttm1, t)
-
-      # (7) Update covariance (using extra scratch buffers) - updates at t+1
-      update_P_tt!(P_tt, K_t, P_ttm1, Z_ttm1, tmpKM, tmpKMK, model, t)
-
-      # (8) PSD correction on the augmented state - updates at t+1
-      correct_Z_tt!(Z_tt, model, t)
-
-      # (9) Compute log-likelihood for this step
-      compute_loglik!(ll_t, Y, Y_ttm1, M_ttm1, t)
-  end
-
-  # Return a FilterOutput (or similar) for convenience
-  return FilterOutput(ll_t, Z_tt, P_tt, Y_ttm1, M_ttm1, K_t, Z_ttm1, P_ttm1)
+    # Return a FilterOutput with the results
+    return FilterOutput(ll_t, Z_tt, P_tt, Y_ttm1, M_ttm1, K_t, Z_ttm1, P_ttm1)
 end
 

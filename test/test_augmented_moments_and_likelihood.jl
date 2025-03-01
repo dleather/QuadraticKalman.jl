@@ -130,4 +130,113 @@ using LinearAlgebra, Random
         end
     end
 
+    @testset "Scalar Case Functions" begin
+        # Setup scalar test cases
+        N = 1  # Single state dimension
+        M = 1  # Single measurement dimension
+        
+        # Parameters for scalar case
+        phi = 0.7                   # AR(1) coefficient
+        mu = 0.2                    # State drift 
+        sigma = 0.5                 # State variance
+        a = 0.1                     # Measurement drift
+        b = 1.0                     # Measurement sensitivity
+        c = 0.3                     # Quadratic effect
+        v = 0.25                    # Measurement noise variance
+        
+        # Create scalar parameters
+        state = QK.StateParams(N, fill(mu, 1), fill(phi, 1, 1), fill(sqrt(sigma), 1, 1))
+        meas = QK.MeasParams(M, N, fill(a, 1), fill(b, 1, 1), [fill(c, 1, 1)], fill(sqrt(v), 1, 1), zeros(M, M))
+        model = QK.QKModel(state, meas)
+        
+        # Test scalar augmented moments with known values
+        # Test mu_aug computation
+        mu_aug = QK.compute_mu_aug(mu, sigma)
+        @test length(mu_aug) == 2
+        @test mu_aug[1] ≈ mu
+        @test mu_aug[2] ≈ mu^2 + sigma
+        
+        # Test Phi_aug computation
+        Phi_aug = QK.compute_Phi_aug(mu, phi)
+        @test size(Phi_aug) == (2, 2)
+        @test Phi_aug[1,1] ≈ phi
+        @test Phi_aug[1,2] ≈ 0.0
+        @test Phi_aug[2,1] ≈ 2.0*mu*phi
+        @test Phi_aug[2,2] ≈ phi^2
+        
+        # Test state mean and covariance
+        state_mean = QK.compute_state_mean(mu, phi)
+        @test state_mean ≈ mu/(1.0-phi)
+        
+        state_cov = QK.compute_state_cov(phi, sigma)
+        @test state_cov ≈ sigma/(1.0-phi^2)
+        
+        # Test B_aug computation
+        B_aug = QK.compute_B_aug(b, c)
+        @test size(B_aug) == (1, 2)
+        @test B_aug[1] ≈ b
+        @test B_aug[2] ≈ c
+        
+        # Test conditional covariance computation
+        Z = [0.5, 0.3]  # Example augmented state
+        Lambda = reshape([1.0], 1, 1)  # Scalar commutation "matrix"
+        
+        cond_cov = QK.compute_cond_cov_state_aug(Z, sigma, mu, phi)
+        @test size(cond_cov) == (2, 2)
+        @test cond_cov[1,1] ≈ sigma
+        
+        # Expected values for conditional covariance
+        u = mu + phi * Z[1]
+        expected_12 = 2.0 * sigma * u
+        expected_22 = 4.0 * u^2 * sigma + 2.0 * sigma^2
+        
+        @test cond_cov[1,2] ≈ expected_12
+        @test cond_cov[2,1] ≈ expected_12
+        @test cond_cov[2,2] ≈ expected_22
+        
+        # Test auxiliary matrices L1, L2, L3
+        L1 = QK.compute_L1(sigma, Lambda)
+        @test L1 ≈ sigma * (1.0 + Lambda[1])
+        
+        L2 = QK.compute_L2(sigma, Lambda)
+        @test L2 ≈ (1.0 + Lambda[1]) * sigma * Lambda[1]
+        
+        L3 = QK.compute_L3(sigma, Lambda)
+        @test L3 ≈ (1.0 + Lambda[1])^2 * Lambda[1] * sigma
+        
+        # Test unconditional covariance of augmented state
+        aug_cov = QK.compute_aug_state_uncond_cov(Z, sigma, mu, phi, Phi_aug)
+        @test size(aug_cov) == (2, 2)
+        @test isposdef(aug_cov)  # Should be positive definite
+    end
+
+    @testset "Edge Cases and Error Handling" begin
+        # Test for compute_B_aug error when C matrices are incorrectly sized
+        N = 2
+        M = 1
+        B = rand(M, N)
+        
+        # Create a vector of matrices where one has incorrect dimensions
+        C_correct = [rand(N, N)]
+        C_incorrect = [rand(N, N+1)]  # Wrong size
+        
+        # Test the correct case works
+        @test size(QK.compute_B_aug(B, C_correct)) == (M, N + N^2)
+        
+        # Test that incorrect dimensions throw DimensionMismatch
+        @test_throws DimensionMismatch QK.compute_B_aug(B, C_incorrect)
+        
+        # Test with multiple matrices in C
+        M_multi = 2
+        B_multi = rand(M_multi, N)
+        C_multi_correct = [rand(N, N) for _ in 1:M_multi]
+        C_multi_incorrect = [rand(N, N), rand(N+1, N)]  # Second matrix has wrong size
+        
+        # Test the correct case works
+        @test size(QK.compute_B_aug(B_multi, C_multi_correct)) == (M_multi, N + N^2)
+        
+        # Test that incorrect dimensions throw DimensionMismatch
+        @test_throws DimensionMismatch QK.compute_B_aug(B_multi, C_multi_incorrect)
+    end
+
 end

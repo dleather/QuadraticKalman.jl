@@ -87,3 +87,23 @@ Coefficients for V(z) = wc + wu*u + wv*v + wuu*u² + wuv*u*v + wvv*v²
     G̃::Matrix{T}    # Augmented duplication matrix
     P::Int          # Augmented state dimension (N + N²)
 end
+
+"""
+    compute_Gamma_tm1(Z::AbstractVector{T}, mu::AbstractVector{T}, Phi::AbstractMatrix{T}) where T <: Real
+
+Compute the matrix Γₜ₋₁ for a VAR(1) process.
+
+# Arguments
+- `Z::AbstractVector{T}`: Current state vector
+- `mu::AbstractVector{T}`: Constant term in state equation
+- `Phi::AbstractMatrix{T}`: Transition matrix
+
+# Returns
+- `Matrix`: N×N matrix Γₜ₋₁
+"""
+function compute_Gamma_tm1(Z::AbstractVector{T}, mu::AbstractVector{T},
+    Phi::AbstractMatrix{T}) where T <: Real
+    N = length(mu)
+    tmp = mu + Phi * Z
+    return kron(I(N), tmp) + kron(tmp, I(N)) 
+end

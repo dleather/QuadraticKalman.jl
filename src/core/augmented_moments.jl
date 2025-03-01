@@ -435,26 +435,6 @@ function compute_cond_cov_state(X::AbstractVector{T}, model::QKModel{T,T2}) wher
 end
 
 """
-    compute_Gamma_tm1(Z::AbstractVector{T}, mu::AbstractVector{T}, Phi::AbstractMatrix{T}) where T <: Real
-
-Compute the matrix Γₜ₋₁ for a VAR(1) process.
-
-# Arguments
-- `Z::AbstractVector{T}`: Current state vector
-- `mu::AbstractVector{T}`: Constant term in state equation
-- `Phi::AbstractMatrix{T}`: Transition matrix
-
-# Returns
-- `Matrix`: N×N matrix Γₜ₋₁
-"""
-function compute_Gamma_tm1(Z::AbstractVector{T}, mu::AbstractVector{T},
-    Phi::AbstractMatrix{T}) where T <: Real
-    N = length(mu)
-    tmp = mu + Phi * Z
-    return kron(I(N), tmp) + kron(tmp, I(N)) 
-end
-
-"""
     compute_aug_state_uncond_cov(Z::AbstractVector{T}, Sigma::Real, mu::Real, Phi::Real, Phi_aug::AbstractMatrix{T}) where T <: Real
 
 Compute the unconditional covariance matrix of the augmented state vector Zₜ = [Xₜ, vec(XₜXₜ')] for a VAR(1) process.
@@ -521,7 +501,7 @@ Compute the augmented observation matrix B̃ for scalar case.
   into the observation space
 """
 function compute_B_aug(B::Real, C::Real)
-    return [B C]
+    return [B`` C]
 end
 
 """

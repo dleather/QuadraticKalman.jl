@@ -2,7 +2,7 @@
 
 julia_version = "1.11.3"
 manifest_format = "2.0"
-project_hash = "50938f0b3aaaa7bebb9bf28618fdcb5c94fad551"
+project_hash = "1822854d197a59c132bad734fe0af893c87b4f82"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1019,10 +1019,10 @@ version = "2.11.2"
     Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 
 [[deps.QuadraticKalman]]
-deps = ["DifferentiableEigen", "ForwardDiff", "LinearAlgebra", "LogExpFunctions", "Parameters", "Preferences", "Random", "RecipesBase", "SparseArrays", "SpecialFunctions"]
+deps = ["DifferentiableEigen", "ForwardDiff", "LinearAlgebra", "LogExpFunctions", "Parameters", "Preferences", "Random", "RecipesBase", "SparseArrays", "SpecialFunctions", "UnPack"]
 path = ".."
 uuid = "03de00d5-86b5-48ba-885c-e25084f99d9a"
-version = "0.1.0"
+version = "0.1.1"
 
 [[deps.RCall]]
 deps = ["CategoricalArrays", "Conda", "DataFrames", "DataStructures", "Dates", "Libdl", "Preferences", "REPL", "Random", "Requires", "StatsModels", "WinReg"]

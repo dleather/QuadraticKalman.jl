@@ -100,7 +100,8 @@ function predict_Z_ttm1!(Z_tt::AbstractMatrix{T}, Z_ttm1::AbstractMatrix{T},
     @unpack Phi_aug, mu_aug = model.aug_state
     Z_ttm1_view = @view Z_ttm1[:, t]
     Z_tt_view = @view Z_tt[:, t]
-    Z_ttm1_view .= mu_aug .+ Phi_aug * Z_tt_view
+    mul!(Z_ttm1_view, Phi_aug, Z_tt_view)  # Z_ttm1_view = Phi_aug * Z_tt_view
+    Z_ttm1_view .+= mu_aug                 # Add mu_aug in-place
 end
 
 """
@@ -172,7 +173,7 @@ This is typically used in the predict step of the QKF for covariance.
 """
 function predict_P_ttm1!(P_tt::AbstractArray{T,3}, P_ttm1::AbstractArray{T,3},
     Σ_ttm1::AbstractArray{T,3}, Z_tt::AbstractMatrix{T}, tmpP::AbstractMatrix{T}, 
-    model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
+    tmpKMK::AbstractMatrix{T}, model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
 
     # 1) Update Σₜₜ₋₁ based on Zₜₜ (call the function with capital Sigma)
     compute_Sigma_ttm1!(Σ_ttm1, Z_tt, model, t)
@@ -182,10 +183,22 @@ function predict_P_ttm1!(P_tt::AbstractArray{T,3}, P_ttm1::AbstractArray{T,3},
     local P_tt_view = @view P_tt[:, :, t]
     local Σ_ttm1_view = @view Σ_ttm1[:, :, t]
     local P_ttm1_view = @view P_ttm1[:, :, t]
-    
-    P_ttm1_view .= ensure_positive_definite(
-        Phi_aug * P_tt_view * Phi_aug' .+ Σ_ttm1_view
-    )
+
+    # (1) Compute Φ * P_t|t * Φ'
+    #     Use mul! to avoid allocating new arrays
+    mul!(tmpKMK, Phi_aug, P_tt_view)          # tmpP = Φ * P_t|t
+    mul!(tmpP, tmpKMK, Phi_aug', false, true) # tmpP = tmpP * Φ'
+        # (The flags `false, true` or simply `mul!(tmpP, tmpP, Phi_aug')` 
+        #  will overwrite tmpP in place.)
+
+    # (2) Add Σ_ttm1_view in-place
+    tmpP .+= Σ_ttm1_view
+
+    # (3) Ensure positivity in-place
+    ensure_positive_definite!(tmpP; shift=1.5e-8)
+
+    # (4) Finally copy result into P_ttm1_view
+    P_ttm1_view .= tmpP
 end
 
 """
@@ -533,9 +546,12 @@ function compute_K_t!(
       @. Kslice = Kslice / M_pred[1, 1]
   else
       # Matrix solve: Kslice = (P_pred * B_aug') * inv(M_pred)
-      F = lu(M_pred)  # Use M_pred instead of S
-      for col in 1:size(Kslice,2)
-          view(Kslice, :, col) .= F \ view(Kslice, :, col)
+      F = lu(M_pred)
+      for i in 1:size(Kslice,1)  # i goes up to P
+          # Grab the row i as a 1D vector of length M
+          row_i = Kslice[i, :]    # shape is (M,)
+          # Solve in place:
+          row_i .= F \ row_i
       end
   end
 end
@@ -695,7 +711,7 @@ function update_Z_tt(
 end
 
 """
-    update_P_tt!(P_tt, K_t, P_ttm1, Z_ttm1, tmpKM, tmpKMK, model, t)
+    update_P_tt!(P_tt, K_t, P_ttm1, Z_ttm1, tmpKM, tmpKMK, tmpKV, model, t; ...)
 
 In-place update of the **filtered covariance** `P_tt[:, :, t+1]` given the one-step-ahead 
 covariance `P_ttm1[:, :, t]`, and the Kalman gain `K_t[:, :, t]`.
@@ -711,7 +727,7 @@ covariance `P_ttm1[:, :, t]`, and the Kalman gain `K_t[:, :, t]`.
 - `tmpKM, tmpKMK::AbstractMatrix{<:Real}`: Temporary buffers `(P×M, P×P)` 
   if you want manual multiplication. In the final code, we do not use them, 
   but they can be placeholders for expansions.
-- `model::QKModel{T,T2}`: Must contain:
+- `model::QKModel{T, T2}`: Must contain:
   - `B_aug::Matrix{T}` (size `M×P`),
   - `V::Matrix{T}` (size `M×M`),
   - `P::Int, M::Int`, etc. 
@@ -729,40 +745,57 @@ covariance `P_ttm1[:, :, t]`, and the Kalman gain `K_t[:, :, t]`.
    make_positive_definite. If your AD can handle in-place modifications, or you define a
    custom adjoint, it should be fine. Otherwise, consider a purely functional approach.
 """
-function update_P_tt!(P_tt::AbstractArray{T1,3}, K_t::AbstractArray{T1,3},
-    P_ttm1::AbstractArray{T1,3},
-    Z_ttm1::AbstractMatrix{T1}, tmpKM::AbstractMatrix{T1},
-    tmpKMK::AbstractMatrix{T1}, model::QKModel{T,T2}, t::Int) where {T1<:Real, T<:Real, T2<:Real}
-    @unpack V = model.meas
-    @unpack B_aug = model.aug_state
-    
-    # 1) Extract views
-    local K_slice = view(K_t, :, :, t)
-    local P_ttm1_view = view(P_ttm1, :, :, t)
-    local P_tt_dest = view(P_tt, :, :, t+1)
-    
-    # 2) Form A = I - K_slice*B_aug
-    # Create identity matrix of appropriate size
-    P = size(K_slice, 1)
-    A = Matrix{T1}(I, P, P)
-    mul!(tmpKM, K_slice, B_aug)  # tmpKM = K_slice * B_aug
-    A .-= tmpKM  # A = I - tmpKM
-    
-    # 3) Compute A * P_ttm1_view * A' efficiently
-    mul!(tmpKMK, A, P_ttm1_view)  # tmpKMK = A * P_ttm1_view
-    mul!(P_tt_dest, tmpKMK, A')   # P_tt_dest = tmpKMK * A'
-    
-    # 4) Add the K*V*K' term - MODIFIED TO FIX DIMENSION MISMATCH
-    # First compute KV directly - K_slice is P×M, V is M×M, result is P×M
-    KV = K_slice * V  # Temporary allocation, but avoids dimension issues
-    
-    # Then compute KV*K' to get P×P result
-    mul!(tmpKM, KV, K_slice')  # tmpKM = KV * K_slice'
-    P_tt_dest .+= tmpKM        # Add to result
-    
-    # 5) Ensure positive-definiteness
-    P_tt_dest .= make_positive_definite(P_tt_dest)
+function update_P_tt!(
+  P_tt::AbstractArray{T1,3},
+  K_t::AbstractArray{T1,3},
+  P_ttm1::AbstractArray{T1,3},
+  Z_ttm1::AbstractMatrix{T1},
+  tmpKM::AbstractMatrix{T1},
+  tmpKMK::AbstractMatrix{T1},
+  tmpKV::AbstractMatrix{T1},
+  model::QKModel{T, T2},
+  t::Int;
+  pd_result::AbstractMatrix{T1},
+  pd_work::AbstractMatrix{T1},
+  pd_eigvals::AbstractVector{T1},
+  pd_eigvecs::AbstractMatrix{T1}
+) where {T1<:Real, T<:Real, T2<:Real}
+  @unpack V = model.meas
+  @unpack B_aug = model.aug_state
+  
+  # 1) Extract views
+  local K_slice = view(K_t, :, :, t)
+  local P_ttm1_view = view(P_ttm1, :, :, t)
+  local P_tt_dest   = view(P_tt, :, :, t+1)
+  
+  # 2) A = I - K_slice * B_aug
+  P = size(K_slice, 1)
+  A = Matrix{T1}(I, P, P)  # typically allocated once, or see comment below
+  mul!(tmpKM, K_slice, B_aug)
+  A .-= tmpKM
+  
+  # 3) Compute A * P_ttm1_view * A'
+  mul!(tmpKMK, A, P_ttm1_view)
+  mul!(P_tt_dest, tmpKMK, A')
+
+  # 4) Use the non-allocating approach
+  mul!(tmpKV, K_slice, V)
+  mul!(tmpKM, tmpKV, K_slice')
+  P_tt_dest .+= tmpKM
+
+  # 5) Ensure positive-definiteness *in-place*, reusing pre‐allocated arrays
+  make_positive_definite_prealloc!(
+      P_tt_dest,
+      pd_result,
+      pd_work,
+      pd_eigvals,
+      pd_eigvecs;
+      clamp_threshold=1e-8
+  )
+
+  return nothing
 end
+
 
 """
     update_P_tt(K_t::AbstractMatrix{T1}, P_ttm1::AbstractMatrix{T1}, Z_ttm1::AbstractVector{T1}, 
@@ -1041,62 +1074,82 @@ performance in repeated calls or integration with optimization routines.
 The function writes results directly into the provided arrays and returns nothing.
 """
 function _qkf_filter_impl!(
-    Z_tt::AbstractMatrix{T}, 
-    P_tt::AbstractArray{T,3}, 
-    Z_ttm1::AbstractMatrix{T}, 
-    P_ttm1::AbstractArray{T,3},
-    Y_ttm1::AbstractMatrix{T}, 
-    M_ttm1::AbstractArray{T,3}, 
-    K_t::AbstractArray{T,3}, 
-    ll_t::AbstractVector{T},
-    Sigma_ttm1::AbstractArray{T,3}, 
-    tmpP::AbstractMatrix{T}, 
-    tmpKM::AbstractMatrix{T}, 
-    tmpKMK::AbstractMatrix{T}, 
-    tmpB::AbstractMatrix{T},
-    data::QKData{T}, 
-    model::QKModel{T,T2}
+  Z_tt::AbstractMatrix{T}, 
+  P_tt::AbstractArray{T,3}, 
+  Z_ttm1::AbstractMatrix{T}, 
+  P_ttm1::AbstractArray{T,3},
+  Y_ttm1::AbstractMatrix{T}, 
+  M_ttm1::AbstractArray{T,3}, 
+  K_t::AbstractArray{T,3}, 
+  ll_t::AbstractVector{T},
+  Sigma_ttm1::AbstractArray{T,3}, 
+  tmpP::AbstractMatrix{T}, 
+  tmpKM::AbstractMatrix{T}, 
+  tmpKMK::AbstractMatrix{T}, 
+  tmpKV::AbstractMatrix{T},
+  tmpB::AbstractMatrix{T},
+  data::QKData{T}, 
+  model::QKModel{T,T2}
 ) where {T <: Real, T2 <: Real}
-    
-    @unpack Y = data
-    T̄ = size(Y, 2)  # Number of time steps
+  @unpack Y = data
+  T̄ = size(Y, 2)  # Number of time steps
 
-    # Initialize state and covariance
-    Z_tt[:, 1] .= model.moments.aug_mean
-    P_tt[:, :, 1] .= model.moments.aug_cov
+  # Initialize state & covariance
+  Z_tt[:, 1] .= model.moments.aug_mean
+  P_tt[:, :, 1] .= model.moments.aug_cov
 
-    # Main filtering loop
-    for t in 1:(T̄-1)
-        # (1) Predict state
-        predict_Z_ttm1!(Z_tt, Z_ttm1, model, t)
+  # ---- PREALLOCATE for PSD correction step ----
+  # Suppose the augmented state dimension is N:
+  N = size(P_tt, 1)
 
-        # (2) Predict covariance
-        predict_P_ttm1!(P_tt, P_ttm1, Sigma_ttm1, Z_tt, tmpP, model, t)
+  # These four arrays are used by make_positive_definite_prealloc!
+  pd_result  = Matrix{T}(undef, N, N)
+  pd_work    = Matrix{T}(undef, N, N)
+  pd_eigvals = Vector{T}(undef, N)
+  pd_eigvecs = Matrix{T}(undef, N, N)
 
-        # (3) Predict measurement
-        predict_Y_ttm1!(Y_ttm1, Z_ttm1, Y, model, t)
+  # Main filtering loop
+  for t in 1:(T̄-1)
+      # (1) Predict state
+      predict_Z_ttm1!(Z_tt, Z_ttm1, model, t)
 
-        # (4) Predict measurement covariance
-        predict_M_ttm1!(M_ttm1, P_ttm1, tmpB, model, t)
+      # (2) Predict covariance
+      predict_P_ttm1!(P_tt, P_ttm1, Sigma_ttm1, Z_tt, tmpP, tmpKMK, model, t)
 
-        # (5) Compute Kalman gain
-        compute_K_t!(K_t, P_ttm1, M_ttm1, tmpB, model, t)
+      # (3) Predict measurement
+      predict_Y_ttm1!(Y_ttm1, Z_ttm1, Y, model, t)
 
-        # (6) Update state - updates at t+1
-        update_Z_tt!(Z_tt, K_t, Y, Y_ttm1, Z_ttm1, t)
+      # (4) Predict measurement covariance
+      predict_M_ttm1!(M_ttm1, P_ttm1, tmpB, model, t)
 
-        # (7) Update covariance (using extra scratch buffers) - updates at t+1
-        update_P_tt!(P_tt, K_t, P_ttm1, Z_ttm1, tmpKM, tmpKMK, model, t)
+      # (5) Compute Kalman gain
+      compute_K_t!(K_t, P_ttm1, M_ttm1, tmpB, model, t)
 
-        # (8) PSD correction on the augmented state - updates at t+1
-        correct_Z_tt!(Z_tt, model, t)
+      # (6) Update state
+      update_Z_tt!(Z_tt, K_t, Y, Y_ttm1, Z_ttm1, t)
 
-        # (9) Compute log-likelihood for this step
-        compute_loglik!(ll_t, Y, Y_ttm1, M_ttm1, t)
-    end
-    
-    return nothing
+      # (7) Update covariance
+      update_P_tt!(
+          P_tt, K_t, P_ttm1, Z_ttm1, tmpKM, tmpKMK, tmpKV, model, t;
+          pd_result = pd_result,
+          pd_work   = pd_work,
+          pd_eigvals = pd_eigvals,
+          pd_eigvecs = pd_eigvecs
+      )
+
+      # (8) PSD correction on the augmented state
+      correct_Z_tt!(Z_tt, model, t)
+
+      # (9) Compute log-likelihood
+      compute_loglik!(ll_t, Y, Y_ttm1, M_ttm1, t)
+  end
+  
+  return nothing
 end
+
+
+
+
 
 """
     qkf_filter!(data::QKData{T}, model::QKModel{T,T2}) -> FilterOutput{T}
@@ -1159,13 +1212,14 @@ function qkf_filter!(data::QKData{T}, model::QKModel{T,T2}) where {T <: Real, T2
     tmpP = zeros(T, P, P)      # Used by predict_P_ttm1!
     tmpKM = zeros(T, P, P)     # Used by update_P_tt!
     tmpKMK = zeros(T, P, P)    # Used by update_P_tt!
+    tmpKV = zeros(T, P, M)     # Used by update_P_tt!
     tmpB = zeros(T, M, P)      # Used by predict_M_ttm1! and compute_K_t!
 
     # Call the low-level implementation function
     _qkf_filter_impl!(
         Z_tt, P_tt, Z_ttm1, P_ttm1, 
         Y_ttm1, M_ttm1, K_t, ll_t,
-        Sigma_ttm1, tmpP, tmpKM, tmpKMK, tmpB,
+        Sigma_ttm1, tmpP, tmpKM, tmpKMK, tmpKV, tmpB,
         data, model
     )
 

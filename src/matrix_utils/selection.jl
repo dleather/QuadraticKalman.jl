@@ -228,4 +228,41 @@ function vech(mat::AbstractMatrix{T}) where T <: Real
     return [mat[i, j] for (i, j) in indices]
 end
 
+"""
+    kronSigmaSigmaIndex(Sigma::AbstractMatrix{T}, i::Int, N::Int) where T
+
+Efficiently retrieve the i-th element of vec(kron(Sigma,Sigma)) without explicitly 
+constructing the Kronecker product.
+
+This function computes a single element of the vectorized Kronecker product of a matrix 
+with itself. It uses index arithmetic to determine which elements of the original matrix 
+to multiply, avoiding the memory allocation of the full N⁴-sized Kronecker product.
+
+# Arguments
+- `Sigma::AbstractMatrix{T}`: The N×N matrix
+- `i::Int`: The 1-based index into the vectorized Kronecker product (i ∈ 1..N⁴)
+- `N::Int`: The dimension of the matrix Sigma
+
+# Returns
+- The i-th element of vec(kron(Sigma,Sigma))
+
+# Implementation Details
+The function decomposes the 1D index i into the corresponding 4D coordinates in the 
+Kronecker product, then retrieves and multiplies the appropriate elements from Sigma.
+"""
+@inline function kronSigmaSigmaIndex(Sigma::AbstractMatrix{T}, i::Int, N::Int) where T
+    i0 = i - 1
+
+    # Correct 4D decomposition for column-major order:
+    r1 = i0 % N                  # row within the "B" block
+    r2 = (i0 ÷ N) % N            # row in the "A" block
+    c1 = (i0 ÷ (N^2)) % N        # column within the "B" block
+    c2 =  i0 ÷ (N^3)             # column in the "A" block
+
+    # Then M(i) = A(r2+1, c2+1) * B(r1+1, c1+1).
+    # (For A=Sigma, B=Sigma, the order of multiplication is the same for real scalars.)
+    return Sigma[r2+1, c2+1] * Sigma[r1+1, c1+1]
+end
+
+
 #xport selection_matrix, duplication_matrix, vech, compute_H̃, compute_G̃

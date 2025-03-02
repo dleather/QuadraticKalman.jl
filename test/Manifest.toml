@@ -1105,7 +1105,7 @@ version = "2.11.2"
     Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 
 [[deps.QuadraticKalman]]
-deps = ["DifferentiableEigen", "ForwardDiff", "LinearAlgebra", "LogExpFunctions", "Parameters", "Preferences", "Random", "RecipesBase", "SparseArrays", "SpecialFunctions"]
+deps = ["DifferentiableEigen", "ForwardDiff", "LinearAlgebra", "LogExpFunctions", "Parameters", "Preferences", "Random", "RecipesBase", "SparseArrays", "SpecialFunctions", "UnPack"]
 path = ".."
 uuid = "03de00d5-86b5-48ba-885c-e25084f99d9a"
 version = "0.1.1"

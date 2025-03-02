@@ -222,6 +222,27 @@ function ensure_positive_definite(A::AbstractMatrix{T1}; shift::Real=1.5e-8) whe
     return (A + A')/2.0 + shift*I
 end
 
+function ensure_positive_definite!(
+    A::AbstractMatrix{T};
+    shift::Real = 1.5e-8
+) where {T<:Real}
+    # (1) Symmetrize A in-place
+    @inbounds for j in 1:size(A,2)
+        for i in 1:j
+            val = 0.5 * (A[i,j] + A[j,i])
+            A[i,j] = val
+            A[j,i] = val
+        end
+    end
+
+    # (2) Add `shift` to the diagonal
+    @inbounds for i in 1:min(size(A,1), size(A,2))
+        A[i,i] += shift
+    end
+
+    return A
+end
+
 """
     issymmetric(mat::AbstractMatrix{T}) where T <: Real
 
@@ -237,5 +258,171 @@ function issymmetric(mat::AbstractMatrix{T}) where T <: Real
     return all(mat .≈ mat')
 end
 
-#export spectral_radius, make_positive_definite, make_symmetric, ensure_positive_definite,
-#    issymmetric
+function make_positive_definite!(A::AbstractMatrix{T}, 
+    work_matrix::AbstractMatrix{T},
+    eig_vals::AbstractVector{T}, 
+    eig_vecs::AbstractMatrix{T}; 
+    clamp_threshold::Real=1e-8) where T <: Real
+
+    # 1) Symmetrize in-place using work_matrix
+    @inbounds for i in 1:size(A, 1)
+        for j in 1:size(A, 2)
+        work_matrix[i, j] = (A[i, j] + A[j, i]) / 2.0
+        end
+    end
+
+    # 2) Eigen-decomp (assuming real-symmetric)
+    d_eigen!(work_matrix, eig_vals, eig_vecs; assume_symmetric=true)
+
+    # 3) Smooth clamp each eigenvalue in-place
+    @inbounds for i in 1:length(eig_vals)
+        eig_vals[i] = smooth_max(eig_vals[i]; threshold = clamp_threshold)
+    end
+
+    # 4) Reconstruct and symmetrize in-place
+    # First compute eig_vecs * Diagonal(eig_vals) into work_matrix
+    mul_diag!(work_matrix, eig_vecs, eig_vals)
+
+    # Then multiply by eig_vecs' into A
+    mul_transpose!(A, work_matrix, eig_vecs)
+
+    # Finally symmetrize A in-place
+    @inbounds for i in 1:size(A, 1)
+        for j in i+1:size(A, 2)
+            A[i, j] = (A[i, j] + A[j, i]) / 2.0
+            A[j, i] = A[i, j]
+        end
+    end
+
+    return A
+end
+
+# Helper function to compute A = B * Diagonal(v) without allocations
+function mul_diag!(A::AbstractMatrix{T}, B::AbstractMatrix{T}, v::AbstractVector{T}) where T <: Real
+    n = length(v)
+    fill!(A, zero(T))
+
+    @inbounds for j in 1:n
+        vj = v[j]
+        for i in 1:n
+            A[i, j] = B[i, j] * vj
+        end
+    end
+    return A
+end
+
+# Helper function to compute A = B * C' without allocations
+function mul_transpose!(A::AbstractMatrix{T}, B::AbstractMatrix{T}, C::AbstractMatrix{T}) where T <: Real
+    n = size(A, 1)
+    fill!(A, zero(T))
+
+    @inbounds for i in 1:n
+        for j in 1:n
+            for k in 1:n
+                A[i, j] += B[i, k] * C[j, k]
+            end
+        end
+    end
+    return A
+end
+
+function d_eigen!(A::AbstractMatrix{T}, 
+    vals::AbstractVector{T}, 
+    vecs::AbstractMatrix{T}; 
+    assume_symmetric::Bool=false) where {T<:Real}
+    # Optionally treat A as a real-symmetric matrix
+    local A_eff
+    if assume_symmetric
+        A_eff = Symmetric(A)
+    else
+        A_eff = A
+    end
+
+    # Get eigendecomposition
+    tmp_vals, tmp_vecs = DifferentiableEigen.eigen(A_eff)
+    N = Int(length(tmp_vals) / 2)
+
+    # Extract eigenvalues
+    @inbounds for i in 1:N
+        vals[i] = tmp_vals[2*i - 1]
+    end
+
+    # Extract eigenvectors correctly
+    # The reshape logic in the original code suggests tmp_vecs has a specific pattern
+    # Looking at the debug output, we need to extract in a different way
+    @inbounds for i in 1:N
+        for j in 1:N
+        # Calculate the correct index based on original reshaping logic
+            idx = (i-1)*N + j
+            vecs[i, j] = tmp_vecs[2*idx - 1]
+        end
+    end
+
+    return vals, vecs
+end
+
+# Convenience function that allocates the workspace for you
+function make_positive_definite_wrapper(A::AbstractMatrix{T}; clamp_threshold::Real=1e-8) where T <: Real
+    n = size(A, 1)
+    work_matrix = similar(A)
+    eig_vals = Vector{T}(undef, n)
+    eig_vecs = Matrix{T}(undef, n, n)
+
+    result = similar(A)
+    copyto!(result, A)
+
+    return make_positive_definite!(result, work_matrix, eig_vals, eig_vecs; clamp_threshold=clamp_threshold)
+end
+
+"""
+    make_positive_definite_prealloc!(A, result, work_matrix, eig_vals, eig_vecs; clamp_threshold)
+Makes `A` positive definite in-place, using pre‐allocated arrays to avoid re‐allocation. 
+- `result` is a scratch array of the same size as `A`.
+- `work_matrix` also is the same size as `A`.
+- `eig_vals` is a scratch vector of length `size(A,1)`.
+- `eig_vecs` is a scratch matrix of size `size(A)...`.
+"""
+function make_positive_definite_prealloc!(
+    A::AbstractMatrix{T},
+    result::AbstractMatrix{T},
+    work_matrix::AbstractMatrix{T},
+    eig_vals::AbstractVector{T},
+    eig_vecs::AbstractMatrix{T};
+    clamp_threshold::Real=1e-8
+) where {T<:Real}
+
+    # 1) Copy input into `result`
+    copyto!(result, A)
+
+    # 2) Symmetrize into work_matrix
+    @inbounds for i in 1:size(A, 1)
+        for j in 1:size(A, 2)
+            work_matrix[i, j] = (result[i, j] + result[j, i]) / 2
+        end
+    end
+
+    # 3) Eigen-decompose (assuming real-symmetric)
+    d_eigen!(work_matrix, eig_vals, eig_vecs; assume_symmetric=true)
+
+    # 4) Smooth-clamp eigenvalues
+    @inbounds for i in 1:length(eig_vals)
+        eig_vals[i] = smooth_max(eig_vals[i]; threshold=clamp_threshold)
+    end
+
+    # 5) Reconstruct:
+    #     work_matrix := eig_vecs * Diagonal(eig_vals)
+    mul_diag!(work_matrix, eig_vecs, eig_vals)
+    #     A := work_matrix * eig_vecs'
+    mul_transpose!(A, work_matrix, eig_vecs)
+
+    # 6) Symmetrize A in-place
+    @inbounds for i in 1:size(A, 1)
+        for j in i+1:size(A, 2)
+            Aij = (A[i, j] + A[j, i]) / 2
+            A[i, j] = Aij
+            A[j, i] = Aij
+        end
+    end
+
+    return A
+end

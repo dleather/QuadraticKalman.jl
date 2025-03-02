@@ -373,7 +373,6 @@ function compute_cond_cov_state_aug(Z::AbstractVector{T}, Sigma::Real, mu::Real,
 
 end
 
-
 """
     compute_cond_cov_state_aug(Z::AbstractVector{T1}, L1::AbstractMatrix{T2}, L2::AbstractMatrix{T3}, L3::AbstractMatrix{T4}, 
                           Lambda::AbstractMatrix{T5}, Sigma::AbstractMatrix{T6}, mu::AbstractVector{T7}, 
@@ -407,6 +406,168 @@ function compute_cond_cov_state_aug(Z::AbstractVector{T1}, L1::AbstractMatrix{T2
                     kron(I(N^2), I + Lambda) * vec(kron(Sigma, Sigma)), (N^2, N^2))
 
     return [Sigma_11 Sigma_12; Sigma_21 Sigma_22]
+end
+
+"""
+    compute_cond_cov_state_aug_noalloc(
+        Z::AbstractVector{T1}, L1::AbstractMatrix{T2}, L2::AbstractMatrix{T3}, L3::AbstractMatrix{T4},
+        Lambda::AbstractMatrix{T5}, Sigma::AbstractMatrix{T6}, mu::AbstractVector{T7},
+        Phi_aug::AbstractMatrix{T8}
+    ) where {T1<:Real, T2<:Real, T3<:Real, T4<:Real, T5<:Real, T6<:Real, T7<:Real, T8<:Real}
+
+Compute the conditional covariance matrix of the augmented state vector Zₜ = [Xₜ, vec(XₜXₜ')] 
+for a multivariate VAR(1) process using pre-allocated memory to minimize allocations.
+
+# Arguments
+- `Z::AbstractVector{T1}`: Current augmented state vector [X, vec(XX')]
+- `L1::AbstractMatrix{T2}`: Auxiliary matrix for computing the top-right block (Sigma_12)
+- `L2::AbstractMatrix{T3}`: Auxiliary matrix (not used in current implementation)
+- `L3::AbstractMatrix{T4}`: Auxiliary matrix for computing the bottom-right block (Sigma_22)
+- `Lambda::AbstractMatrix{T5}`: Commutation matrix
+- `Sigma::AbstractMatrix{T6}`: State noise covariance matrix
+- `mu::AbstractVector{T7}`: Constant term in state equation
+- `Phi_aug::AbstractMatrix{T8}`: Augmented transition matrix
+
+# Returns
+- `Matrix`: (N+N²)×(N+N²) conditional covariance matrix of the augmented state
+
+# Implementation Details
+This function computes the same result as `compute_cond_cov_state_aug` but uses in-place operations
+to minimize memory allocations. The implementation:
+
+1. Allocates a single output matrix of the correct size
+2. Fills the top-left block with Sigma
+3. Computes mu + Phi_aug[1:N,:]*Z into a temporary vector
+4. Computes the top-right block (Sigma_12) using L1
+5. Fills the bottom-left block as the transpose of the top-right block
+6. Computes the bottom-right block (Sigma_22) using L3 and Lambda
+
+This implementation is optimized for performance in iterative algorithms like Kalman filtering.
+"""
+
+function compute_cond_cov_state_aug_noalloc(
+    Z::AbstractVector{T1},
+    L1::AbstractMatrix{T2},
+    L2::AbstractMatrix{T3},
+    L3::AbstractMatrix{T4},
+    Lambda::AbstractMatrix{T5},
+    Sigma::AbstractMatrix{T6},
+    mu::AbstractVector{T7},
+    Phi_aug::AbstractMatrix{T8}
+) where {
+    T1<:Real, T2<:Real, T3<:Real, T4<:Real,
+    T5<:Real, T6<:Real, T7<:Real, T8<:Real
+}
+    #-------------------
+    # 1) Set up sizes
+    #-------------------
+    N = length(mu)
+    # The final output is (N + N^2)×(N + N^2)
+    out = Matrix{eltype(Sigma)}(undef, N + N^2, N + N^2)
+
+    #-------------------
+    # 2) Top-left block: Sigma_11 = Sigma
+    #-------------------
+    @views out[1:N, 1:N] .= Sigma
+
+    #-------------------
+    # 3) Top-right block: Sigma_12 = reshape(L1*(mu+Phi_aug[1:N,:]*Z), (N^2,N))'
+    #    We do that with no extra big arrays:
+    #-------------------
+    # 3a) Compute  mu + Phi_aug[1:N,:]*Z  in a length-N temp
+    tmpN = copy(mu)
+    mul!(tmpN, Phi_aug[1:N, :], Z, 1.0, 1.0)  # tmpN .= (Phi_aug[1:N,:]*Z + mu)
+
+    # 3b) L1*(that length-N vector) => length N^3, then fill top-right
+    len12 = N^3
+    tmp12 = Vector{eltype(Sigma)}(undef, len12)
+    mul!(tmp12, L1, tmpN)  # length-N^3 result
+
+    # Write it into out[1:N, N+1 : N+N^2] in transposed shape
+    @views for j in 1:N
+        rowstart = (j-1)*N^2
+        for i in 1:N^2
+            out[j, N + i] = tmp12[rowstart + i]
+        end
+    end
+
+    #-------------------
+    # 4) Bottom-left block: Sigma_21 = Sigma_12'
+    #-------------------
+    # Just copy the transpose of top-right block
+    @views for j in 1:N
+        for i in 1:N^2
+            out[N + i, j] = out[j, N + i]
+        end
+    end
+
+    #-------------------
+    # 5) Bottom-right block: Sigma_22
+    #
+    #    Sigma_22 = reshape(
+    #        L3*(kron(mu,mu)+Phi_aug[N+1:end,:]*Z)
+    #      + kron(I_{N^2}, I+Lambda)*vec(kron(Sigma,Sigma)),  (N^2,N^2) )
+    #-------------------
+    # 5a) Build vA = kron(mu,mu)+...
+    #                => length N^2
+    vA = Vector{eltype(Sigma)}(undef, N^2)
+    @inbounds for c in 1:N
+        for r in 1:N
+            vA[(c-1)*N + r] = mu[r]*mu[c]
+        end
+    end
+    # add Phi_aug[N+1:end,:]*Z
+    mul!(vA, Phi_aug[N+1:end,:], Z, 1.0, 1.0)
+
+    # multiply => tmp2 = L3 * vA  => length N^4
+    tmp2 = Vector{eltype(Sigma)}(undef, N^4)
+    mul!(tmp2, L3, vA)
+
+    #-------------------
+    # 5b) Add in  kron(I_{N^2}, I+Lambda)* vec(kron(Sigma,Sigma))
+    #    We'll compute that big product in a loop => tmp3 (length N^4)
+    #-------------------
+    # Allocate space for the final block
+    tmp3 = Vector{eltype(Sigma)}(undef, N^4)
+
+    # We'll do block by block, because  kron(I_{N^2}, I+Lambda) is
+    # block-diagonal with N^2 blocks, each (I+Lambda).
+    # We do not build vec(kron(Sigma,Sigma)) either; we compute each entry on the fly.
+    @inbounds @views for blockIdx in 0:(N^2-1)
+        # blockIdx picks which diagonal block (I+Lambda) is being applied
+        # The subvector of length N^2 in the "input" starts at blockIdx*N^2+1
+        # The subvector of length N^2 in the "output" is also at blockIdx*N^2+1
+        outOffset = blockIdx*N^2
+        # For each row r in 1..N^2, do y = sum_{col=1..N^2} (I+Lambda)[r,col] * x
+        for r in 1:N^2
+            acc = zero(eltype(Sigma))
+            for c in 1:N^2
+                # (I+Lambda)[r,c] = δ(r,c) + Lambda[r,c]
+                local λrc = (r == c ? 1 : 0) + Lambda[r,c]
+                # x = the (blockIdx*N^2 + c)-th element of vec(kron(Sigma,Sigma))
+                local xval = kronSigmaSigmaIndex(Sigma, blockIdx*N^2 + c, N)
+                acc += λrc * xval
+            end
+            tmp3[outOffset + r] = acc
+        end
+    end
+
+    # Now add tmp3 into tmp2 => tmp2[i] += tmp3[i]
+    for i in 1:length(tmp2)
+        tmp2[i] += tmp3[i]
+    end
+
+    #-------------------
+    # 5c) Finally, place tmp2 into out's bottom-right N^2×N^2 block (column‐major)
+    #-------------------
+    @inbounds for col in 1:N^2
+        colstart = (col-1)*N^2
+        for row in 1:N^2
+            out[N + row, N + col] = tmp2[colstart + row]
+        end
+    end
+
+    return out
 end
 
 """
@@ -560,7 +721,7 @@ function compute_Sigma_ttm1!(Sigma_ttm1::AbstractArray{T, 3}, Z_tt::AbstractMatr
     model::QKModel{T,T2}, t::Int) where {T <: Real, T2 <: Real}
     @unpack mu, Sigma, Phi, N = model.state
     @unpack Lambda, L1, L2, L3, P, Phi_aug = model.aug_state
-    Sigma_ttm1[:, :, t] .= compute_cond_cov_state_aug(Z_tt[:,t], L1, L2, L3, Lambda, Sigma, mu, Phi_aug)
+    Sigma_ttm1[:, :, t] .= compute_cond_cov_state_aug_noalloc(Z_tt[:,t], L1, L2, L3, Lambda, Sigma, mu, Phi_aug)
 end
 
 """

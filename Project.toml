@@ -1,7 +1,7 @@
 name = "QuadraticKalman"
 uuid = "03de00d5-86b5-48ba-885c-e25084f99d9a"
 authors = ["David Leather <David.A.Leather@gmail.com> and contributors"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 DifferentiableEigen = "73a20539-4e65-4dcb-a56d-dc20f210a01b"

@@ -9,3 +9,9 @@ README_files/
 !README.md
 codeweaver/
 run_codeweaver.bat
+test_env/
+**/Manifest.toml
+**/*.jl.*.cov
+**/*.jl.cov
+**/*.jl.mem
+.vscode/

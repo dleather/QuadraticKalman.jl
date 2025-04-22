@@ -28,9 +28,9 @@ using Aqua, Plots
     include("test_qkf_negloglik.jl")
     include("test_mutating_filter.jl")
     include("test_end_to_end.jl")
-    try
-        include("test_r_comparison.jl")  # If you have R-based comparisons
-    catch err
-        @warn "Skipping R comparison tests: $err"
+    if VERSION >= v"1.11.0"
+        include("test_r_comparison.jl")
+    else
+        @info "Skipping R comparison tests on Julia < 1.11.0"
     end
 end

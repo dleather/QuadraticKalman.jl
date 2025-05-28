@@ -32,14 +32,21 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       - name: Run tests directly
         run: |
-          julia --project -e 'using Pkg; Pkg.test()'
+          julia --project -e '
+          using Pkg;
+          Pkg.test(coverage=true)
+          using Coverage;
+          LCOV.writexml(LCOV.process_folder())'
       - uses: julia-actions/julia-processcoverage@v1
       - name: List coverage files
+      - name: Show coverage diagnostics
         run: |
           echo "👉 Coverage files in $(pwd):"
-          ls -lh coverage.xml lcov.info || ls -lh .
-          echo "----"
-          cat coverage.xml | head -n 20 || echo "coverage.xml not found"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            dir coverage.xml lcov.info 2>$null || dir
+          else
+            ls -lh coverage.xml lcov.info 2>/dev/null || ls -lh .
+          fi
       - uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

@@ -38,7 +38,6 @@ jobs:
           using Coverage;
           LCOV.writexml(LCOV.process_folder())'
       - uses: julia-actions/julia-processcoverage@v1
-      - name: List coverage files
       - name: Show coverage diagnostics
         run: |
           echo "👉 Coverage files in $(pwd):"

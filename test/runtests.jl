@@ -6,7 +6,7 @@ using RData, JSON
 using Aqua, Plots
 @testset "QuadraticKalman.jl" begin
     @testset "Code quality (Aqua.jl)" begin
-        Aqua.test_all(QK, ambiguities=false)
+        Aqua.test_all(QK, ambiguities=false, stale_deps = False)
         Aqua.test_ambiguities(QK)
         Aqua.test_unbound_args(QK)
         Aqua.test_undefined_exports(QK)

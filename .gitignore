@@ -15,3 +15,4 @@ test_env/
 **/*.jl.cov
 **/*.jl.mem
 .vscode/
+run_codeweaver.bat

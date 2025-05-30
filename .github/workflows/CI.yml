@@ -36,8 +36,8 @@ jobs:
           using Pkg;
           Pkg.add("Coverage");
           using Coverage;
-          Pkg.test(coverage=true)
-          LCOV.writexml(LCOV.process_folder())
+          result = Pkg.test(coverage=true)
+          LCOV.writefile("lcov.info", LCOV.process_folder())
           exit(result != nothing && result != true ? 1 : 0)'
       - uses: julia-actions/julia-processcoverage@v1
       - name: Show coverage diagnostics
